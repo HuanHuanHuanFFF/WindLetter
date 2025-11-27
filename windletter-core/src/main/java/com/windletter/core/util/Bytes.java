@@ -22,6 +22,17 @@ public final class Bytes {
         return out;
     }
 
+    public static byte[] xor(byte[] a, byte[] b) {
+        if (a.length != b.length) {
+            throw new IllegalArgumentException("xor input length mismatch");
+        }
+        byte[] out = new byte[a.length];
+        for (int i = 0; i < a.length; i++) {
+            out[i] = (byte) (a[i] ^ b[i]);
+        }
+        return out;
+    }
+
     public static byte[] ascii(String s) {
         return s.getBytes(StandardCharsets.US_ASCII);
     }

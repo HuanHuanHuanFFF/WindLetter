@@ -1,5 +1,7 @@
 package com.windletter.armor;
 
+import com.windletter.protocol.util.JsonUtil;
+
 /**
  * Codec for JSON armor wrapper.
  * JSON 装甲编码/解码器。
@@ -7,10 +9,16 @@ package com.windletter.armor;
 public class JsonArmorCodec {
 
     public String toArmor(ArmorJsonEnvelope envelope) {
-        throw new UnsupportedOperationException("JSON armor serialization not yet implemented");
+        if (envelope == null) {
+            throw new IllegalArgumentException("envelope is null");
+        }
+        return JsonUtil.toJson(envelope);
     }
 
     public ArmorJsonEnvelope fromArmor(String armorText) {
-        throw new UnsupportedOperationException("JSON armor parsing not yet implemented");
+        if (armorText == null) {
+            throw new IllegalArgumentException("armor text is null");
+        }
+        return JsonUtil.fromJson(armorText, ArmorJsonEnvelope.class);
     }
 }

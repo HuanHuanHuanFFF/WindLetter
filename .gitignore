@@ -1,7 +1,45 @@
-/.gradle/
-/build/
-/**/build/
-/.idea/
-/*.iml
-/.vscode/
-/.DS_Store
+# =========================
+# Gradle / Build 输出目录
+# =========================
+.gradle/
+build/
+**/build/
+out/
+**/out/
+bin/
+.gradle-tmp/
+
+# =========================
+# IDEA / VSCode / 工程配置
+# =========================
+.idea/
+*.iml
+.vscode/
+.run/
+
+# =========================
+# 编译产物 / 临时文件
+# =========================
+*.class
+*.log
+*.tmp
+*.swp
+*.swo
+
+# =========================
+# 测试输出 / 报告目录
+# （保留 src/test/... 源码，不要忽略！）
+# =========================
+test-output/
+test-results/
+**/test-output/
+**/test-results/
+**/reports/
+**/jacoco/
+**/surefire-reports/
+
+# =========================
+# 系统文件
+# =========================
+.DS_Store
+Thumbs.db
