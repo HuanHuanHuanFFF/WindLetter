@@ -138,61 +138,75 @@ tag
 
 
 
-## 混淆模式下计算rid
+# 混淆模式下计算 rid（方案 A，salt = "wind"）
+**记号**  
+- 使用 HKDF-HMAC-SHA256；`Trunc_N(·)` 取前 N 字节；输出使用 Base64URL（无填充）。  
+- 建议 `N = 16`（128-bit）；如不敏感于体积可取 `N = 32`。
 
-好嘞～按你要求把 **salt 固定为 `"wind"`**，不给伪代码，只给可直接落文档的流程与公式。
+---
 
-### 记号
+## 1) 发送方（写入 `recipients[i].rids`）
 
-- `H = SHA-256`；`HKDF = HKDF-HMAC-SHA256`
-- `Trunc_N()`：取前 N 字节；**建议 N=16（128-bit）**，需要更强可用 N=32
-- 输出统一 **Base64URL(无填充)**
+### X25519 路
+生成会话秘密：
+$$
+SS_{\mathrm{ECC}}=\mathrm{X25519}\!\left(sk_{\mathrm{eph}},\ pk^{\mathrm{recv}}_{\mathrm{ecc}}\right)
+$$
 
-------
+派生 rid：
+$$
+\begin{aligned}
+\mathrm{PRK}_{\mathrm{ecc}} &= \mathrm{HKDF\mbox{-}Extract}\big(\text{"wind"},\ SS_{\mathrm{ECC}}\big) \\
+rid_{\mathrm{x25519}} &= \mathrm{Base64URL}\!\Big(\mathrm{Trunc}_N\big(\mathrm{HKDF\mbox{-}Expand}(\mathrm{PRK}_{\mathrm{ecc}},\ \text{"rid/x25519"},\ N)\big)\Big)
+\end{aligned}
+$$
 
-### 1) 发送方（写入 recipients[i].rids）
+### ML-KEM-768 路
+封装并得到密文：
+$$
+(SS_{\mathrm{PQ}},\ ct_{\mathrm{PQ}})=\mathrm{MLKEM768.Encap}\!\left(pk^{\mathrm{recv}}_{\mathrm{pq}}\right)
+$$
 
-#### X25519 路
+派生 rid：
+$$
+\begin{aligned}
+\mathrm{PRK}_{\mathrm{pq}} &= \mathrm{HKDF\mbox{-}Extract}\big(\text{"wind"},\ SS_{\mathrm{PQ}}\big) \\
+rid_{\mathrm{mlkem768}} &= \mathrm{Base64URL}\!\Big(\mathrm{Trunc}_N\big(\mathrm{HKDF\mbox{-}Expand}(\mathrm{PRK}_{\mathrm{pq}},\ \text{"rid/mlkem768"},\ N)\big)\Big)
+\end{aligned}
+$$
 
-- 共享秘密：(;SS_{ECC} = \mathrm{X25519}(sk_{eph},\ pk^{recv}_{ecc});)
-- HKDF：
-   (;PRK_{ecc}=\mathrm{HKDF_Extract}(\text{"wind"},\ SS_{ECC}))
-   (;rid_{x25519}=\mathrm{Base64URL}(\mathrm{Trunc_N}(\mathrm{HKDF_Expand}(PRK_{ecc},\ \text{"rid/x25519"},\ N))))
-
-#### ML-KEM-768 路
-
-- 封装：(;(SS_{PQ},\ ct_{PQ})=\mathrm{MLKEM768.Encap}(pk^{recv}_{pq});)
-- HKDF：
-   (;PRK_{pq}=\mathrm{HKDF_Extract}(\text{"wind"},\ SS_{PQ}))
-   (;rid_{mlkem768}=\mathrm{Base64URL}(\mathrm{Trunc_N}(\mathrm{HKDF_Expand}(PRK_{pq},\ \text{"rid/mlkem768"},\ N))))
-- 写入：
-
+写入收件人条目（示例）：
 ```json
-"rids": { "x25519": "<rid_x25519>", "mlkem768": "<rid_mlkem768>" }
+{"rids": { "x25519": "<rid_x25519>", "mlkem768": "<rid_mlkem768>" }}
 ```
 
-------
+---
 
-### 2) 接收方（匹配自己的条目）
+## 2) 接收方（匹配自己的条目）
 
-#### 逐路重算
+逐路重算（与发送方同式）：
 
-- (SS_{ECC}=\mathrm{X25519}(sk^{recv}_{ecc},\ epk)) → 同上式得 `rid'_x25519`
-- (SS_{PQ}=\mathrm{MLKEM768.Decap}(sk^{recv}*{pq},\ ct*{PQ})) → 同上式得 `rid'_{mlkem768}`
+X25519：
+$$
+SS_{\mathrm{ECC}}=\mathrm{X25519}\!\left(sk^{\mathrm{recv}}_{\mathrm{ecc}},\ epk\right)
+$$
 
-#### 定位收件人
+ML-KEM-768：
+$$
+SS_{\mathrm{PQ}}=\mathrm{MLKEM768.Decap}\!\left(sk^{\mathrm{recv}}_{\mathrm{pq}},\ ct_{\mathrm{PQ}}\right)
+$$
 
-- 常量时间比较同时命中：
-   `ct_eq(rid'_x25519, recipients[i].rids.x25519)` 且
-   `ct_eq(rid'_mlkem768, recipients[i].rids.mlkem768)`
+从 `SS` 通过同一 HKDF 标签链得到
+$rid'_{\mathrm{x25519}}$ 与 $rid'_{\mathrm{mlkem768}}$，用**常量时间比较**定位：
+```
+ct_eq(rid'_x25519,  recipients[i].rids.x25519) &&
+ct_eq(rid'_mlkem768, recipients[i].rids.mlkem768)
+```
 
-------
+---
 
-### 3) 说明与注意
-
-- **隐私**：即使 `salt` 固定为 `"wind"`，每条消息的 `SS_{ECC}`（随 `epk` 变）与 `SS_{PQ}`（随 `ct_{PQ}` 变）都会变，故 `rid_*` 仍**逐条不同**、外人不可重算。
-- **用途**：`rid_*` 仅用于**识别/路由**，不参与任何解密或权限判定。
-- **实现**：保持标签域分离（`"rid/x25519"`、`"rid/mlkem768"`），比较用**常量时间**。
-
-这样即可与当前 **X25519Kyber768** 的加解密流程无缝对齐，同时满足你“salt 短且固定”的需求。
+## 3) 说明与注意
+- 固定 `salt="wind"` 依然安全：`SS_{\mathrm{ECC}}` 随 `epk` 变、`SS_{\mathrm{PQ}}` 随 `ct_{\mathrm{PQ}}` 变，故不同消息的 `rid_*` 自然不同，外部无法重算。  
+- `rid_*` 仅用于识别/路由，不参与解密或权限判定。  
+- 输出统一 Base64URL（无填充）；比较时使用常量时间比较。
 
