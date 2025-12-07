@@ -205,8 +205,9 @@ ct_eq(rid'_mlkem768, recipients[i].rids.mlkem768)
 
 ---
 
-## 3) 说明与注意
-- 固定 `salt="wind"` 依然安全：`SS_{\mathrm{ECC}}` 随 `epk` 变、`SS_{\mathrm{PQ}}` 随 `ct_{\mathrm{PQ}}` 变，故不同消息的 `rid_*` 自然不同，外部无法重算。  
+### 3) 说明与注意
+
+- 固定 `salt="wind"` 依然安全：$SS_{\mathrm{ECC}}$ 随 $epk$ 变，$SS_{\mathrm{PQ}}$ 随 $ct_{\mathrm{PQ}}$ 变，故不同消息的 $rid$ 自然不同，外部无法重算。  
 - `rid_*` 仅用于识别/路由，不参与解密或权限判定。  
-- 输出统一 Base64URL（无填充）；比较时使用常量时间比较。
+- 输出统一 **Base64URL**（无填充）；比较时使用**常量时间**比较。
 
