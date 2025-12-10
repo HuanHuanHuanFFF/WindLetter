@@ -158,17 +158,6 @@
 
 
 
-保证1bit不改的集合:
-
-```
-aad
-iv
-ciphertext
-tag
-```
-
-
-
 ## 长度规范
 
 | 项目                             | 长度                                      | 依据 / 备注                                                  |
@@ -200,56 +189,156 @@ tag
 
 
 
+
+## 验证流程 (Verification Process)
+
+### 1. 外层完整性校验 (Outer Integrity Check)
+
+**目标**：保证整个 JSON 在传输过程中 1 bit 不改。
+
+1.  **AAD 一致性复核**：
+    接收方独立计算收件人列表的摘要，并与报文中的 `aad` 字段比对：
+    $$
+    \text{calc_aad} = \text{Base64URL}( \text{JCS}(\text{json.recipients}) )
+    $$
+    * **判定**：若 `calc_aad != json.aad`，**拒绝**（说明有人修改了收件人列表）。
+
+2.  **构建 GCM 参数**：
+    * **Key**: 上一步解密流程得到的 **CEK**。
+    * **IV**: 直接取 `json.iv`。
+    * **AAD Input**: 拼接外层头与 AAD 字段（注意是 ASCII 拼接）：
+        $$
+        \text{AAD}_{\text{bytes}} = \text{ASCII}(\text{json.protected}) + "." + \text{ASCII}(\text{json.aad})
+        $$
+
+3.  **AES-GCM 解密与验真**：
+    执行解密操作（此步骤隐含了 Tag 校验）：
+    $$
+    \text{JWS_Bytes} = \text{AES-GCM-Decrypt}(\text{key}=\text{CEK}, \text{iv}=\text{IV}, \text{aad}=\text{AAD}_{\text{bytes}}, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})
+    $$
+    * **判定**：若解密抛出异常（Tag 校验失败），**拒绝**（说明密文、Tag 或 AAD 被篡改）。
+    * **成功**：获得内层明文 `JWS_Bytes`。
+
+### 2. 内外层绑定校验 (Binding Check)
+
+**目标**：防止“换壳攻击”（防止攻击者将合法的内层 JWS 放入伪造的外层 JWE 中）。
+
+1.  **解析内层**：
+    将 `JWS_Bytes` 反序列化为 JWS 对象，提取其 Header 中的 `pht` 和 `rch` 字段。
+
+2.  **计算预期哈希 (Expected Hash)**：
+    接收方基于**自己收到的外层数据**，重新计算指纹：
+    $$
+    \text{exp_pht} = \text{Base64URL}( \text{SHA256}( \text{JCS}(\text{outer.protected}) ) )
+    $$
+    $$
+    \text{exp_rch} = \text{Base64URL}( \text{SHA256}( \text{JCS}(\text{outer.recipients}) ) )
+    $$
+
+3.  **指纹比对**：
+    使用常量时间比较 (Constant-Time Compare) 核对指纹：
+    * **判定**：
+        $$
+        \text{Check}(\text{inner.pht} == \text{exp_pht}) \quad \text{AND} \quad \text{Check}(\text{inner.rch} == \text{exp_rch})
+        $$
+    * 若任一不匹配，**拒绝**（说明外壳已被替换，不再与内芯匹配）。
+
+### 3. 来源认证与签名校验 (Signature Verification)
+
+**目标**：确认发件人身份，并确保业务正文 (Payload) 未被篡改。
+
+1.  **获取发件人公钥**：
+    从内层 JWS Header 获取 `kid`，在本地可信列表或公钥簿中查找对应的 **Ed25519 公钥** ($pk_{sign}$)。
+
+2.  **重构签名输入 (Signing Input)**：
+    拼接内层头部和 Payload 的 Base64URL 形式：
+    $$
+    \text{SigInput} = \text{ASCII}(\text{inner.protected_b64}) + "." + \text{ASCII}(\text{inner.payload_b64})
+    $$
+
+3.  **执行验签**：
+    使用 Ed25519 算法验证签名：
+    $$
+    \text{Valid} = \text{Ed25519.Verify}(pk_{sign}, \text{SigInput}, \text{inner.signature})
+    $$
+    * **判定**：
+        * 若 `Valid` 为 `False`：**拒绝**（正文被篡改或私钥不匹配）。
+
 ## 加密解密流程
 
 ### 混合算法：X25519Kyber768 (Hybrid Combiner)
 
-
-#### 1. 公开模式 
+#### 1. 公开模式 (Public Mode)
 
 ##### 1. 加密流程 (发送方)
-1.  **ECC**: 使用 **发送方静态私钥** ($sk_{static}^{sender}$) 和 **接收方静态公钥** 计算：
-    $$ SS_{ECC} = \text{X25519}(sk_{static}^{sender}, pk_{static}^{recv}) $$
-2.  **PQC**: 同样执行 ML-KEM 封装，生成 $ct$ 和 $SS_{PQ}$ (随机)。
-3.  **Combiner**: $Z = SS_{ECC} \ || \ SS_{PQ}$，后续同 HKDF 流程。
+1.  **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
+2.  **ECC 计算**：使用 **发送方静态私钥** ($sk_{static}^{sender}$) 和 **接收方静态公钥** ($pk_{static}^{recv}$) 计算：
+    $$SS_{ECC} = \text{X25519}(sk_{static}^{sender}, pk_{static}^{recv})$$
+3.  **PQC 封装**：针对接收方 PQC 公钥执行 ML-KEM 封装，生成共享秘密 $SS_{PQ}$ 和密文 $ct$：
+    $$(SS_{PQ}, \ ct) = \text{ML-KEM.Encap}(pk_{static}^{recv})$$
+    * 将 $ct$ 填入 `recipients[i].ek`。
+4.  **混合派生 (Combiner)**：
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
+    * 派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。
+5.  **加密 CEK**：
+    * 使用 KEK 加密 CEK：$C_{key} = \text{AES-GCM-Encrypt}(KEK, CEK)$。
+    * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
+6.  **加密 Payload**：
+    * 使用 CEK 加密内层数据：
+        $$\text{ciphertext} = \text{AES-GCM-Encrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{pt}=\text{JWS_Bytes})$$
 
 ##### 2. 解密流程 (接收方)
-1.  **识别**: 从 `protected.kids.x25519` 获取发送方 ID，查找对应的 **发送方静态公钥** ($pk_{static}^{sender}$)。
-2.  **ECC**: 使用 **接收方静态私钥** ($sk_{static}^{recv}$) 计算：
-    $$ SS_{ECC} = \text{X25519}(sk_{static}^{recv}, pk_{static}^{sender}) $$
-3.  **PQC**: 解开 `ek` 得到 $SS_{PQ}$。
-4.  **Combiner**: 混合后解密。
+1.  **识别与 ECC**：从 Header 获取发送方 ID，查找其公钥。使用 **接收方静态私钥** ($sk_{static}^{recv}$) 计算：
+    $$SS_{ECC} = \text{X25519}(sk_{static}^{recv}, pk_{static}^{sender})$$
+2.  **PQC 恢复**：从 `recipients[i].ek` 提取密文 $ct$，解封装得到：
+    $$SS_{PQ} = \text{ML-KEM.Decap}(sk_{static}^{recv}, ct)$$
+3.  **混合派生 (Combiner)**：
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
+    * 执行 HKDF 操作计算出 **KEK**。
+4.  **解密 CEK**：
+    * 解开 `encrypted_key` 得到会话密钥：$CEK = \text{AES-GCM-Decrypt}(KEK, C_{key})$。
+5.  **解密 Payload**：
+    * 使用 CEK 解密外层密文得到内层数据：
+        $$\text{JWS_Bytes} = \text{AES-GCM-Decrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})$$
 
-#### 2. 混淆模式 (Ephemeral-Static ECC + Ephemeral PQC)
+---
+
+#### 2. 混淆模式 (Obfuscation Mode)
 
 ##### 1. 加密流程 (发送方)
-1.  **准备密钥**：生成随机的内容加密密钥 (**CEK**)。
+1.  **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
 2.  **X25519 协商**：
-    *   生成临时密钥对 $(sk_{eph}, pk_{eph})$。
-    *   计算经典共享秘密：$SS_{ECC} = \text{X25519}(sk_{eph}, pk_{recv\_static})$。
-    *   将 $pk_{eph}$ 填入 `protected.epk`。
+    * 生成临时密钥对 $(sk_{eph}, pk_{eph})$。
+    * 计算经典共享秘密：$SS_{ECC} = \text{X25519}(sk_{eph}, pk_{static}^{recv})$。
+    * 将 $pk_{eph}$ 填入 `protected.epk`。
 3.  **ML-KEM 封装**：
-    *   针对接收方公钥执行封装：$(SS_{PQ}, \ ct) = \text{ML-KEM.Encap}(pk_{recv\_static})$。
-    *   将 $ct$ (1088字节) 填入 `recipients[i].ek`。*(注意：每位收件人独有一份)*
+    * 针对接收方 PQC 公钥执行封装：$(SS_{PQ}, \ ct) = \text{ML-KEM.Encap}(pk_{static}^{recv})$。
+    * 将 $ct$ (1088字节) 填入 `recipients[i].ek`。*(注意：每位收件人独有一份)*
 4.  **混合派生 (Combiner)**：
-    *   拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
-    *   派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
+    * 派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。
 5.  **加密 CEK**：
-    *   使用 KEK 加密 CEK：$C_{key} = \text{AES-GCM-Encrypt}(KEK, CEK)$。
-    *   将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
+    * 使用 KEK 加密 CEK：$C_{key} = \text{AES-GCM-Encrypt}(KEK, CEK)$。
+    * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
+6.  **加密 Payload**：
+    * 使用 CEK 加密内层数据：
+        $$\text{ciphertext} = \text{AES-GCM-Encrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{pt}=\text{JWS_Bytes})$$
 
 ##### 2. 解密流程 (接收方)
 1.  **X25519 恢复**：
-    *   从 `protected.epk` 提取发送方临时公钥。
-    *   计算经典共享秘密：$SS_{ECC} = \text{X25519}(sk_{recv\_static}, pk_{eph})$。
+    * 从 `protected.epk` 提取发送方临时公钥。
+    * 计算经典共享秘密：$SS_{ECC} = \text{X25519}(sk_{static}^{recv}, pk_{eph})$。
 2.  **ML-KEM 恢复**：
-    *   从 `recipients[i].ek` 提取密文。
-    *   解封装抗量子共享秘密：$SS_{PQ} = \text{ML-KEM.Decap}(sk_{recv\_static}, ek)$。
+    * 从 `recipients[i].ek` 提取密文。
+    * 解封装抗量子共享秘密：$SS_{PQ} = \text{ML-KEM.Decap}(sk_{static}^{recv}, ek)$。
 3.  **混合派生 (Combiner)**：
-    *   拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
-    *   执行与发送方相同的 HKDF 操作，计算出 **KEK**。
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
+    * 执行 HKDF 操作计算出 **KEK**。
 4.  **解密 CEK**：
-    *   使用 KEK 解密 `recipients[i].encrypted_key`：$CEK = \text{AES-GCM-Decrypt}(KEK, C_{key})$。
+    * 使用 KEK 解密 `recipients[i].encrypted_key` 得到会话密钥：$CEK = \text{AES-GCM-Decrypt}(KEK, C_{key})$。
+5.  **解密 Payload**：
+    * 使用 CEK 解密外层密文得到内层数据：
+        $$\text{JWS_Bytes} = \text{AES-GCM-Decrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})$$
 
 
 
