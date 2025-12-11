@@ -154,29 +154,24 @@
 }
 ```
 
-
-
-
-
 ## 长度规范
 
-| 项目                             | 长度                                      | 依据 / 备注                                                  |
-| -------------------------------- | ----------------------------------------- | ------------------------------------------------------------ |
-| **CEK（A256GCM）**               | **32 B**                                  | A256GCM 使用 256-bit 密钥。                                  |
-| **GCM IV（Nonce）**              | **12 B（96-bit）**                        | JWA/NIST 要求与推荐使用 96-bit IV。([rfc-editor.org](https://www.rfc-editor.org/rfc/rfc7638.html?utm_source=chatgpt.com)) |
-| **GCM Tag**                      | **16 B（128-bit）**                       | JWA 要求 128-bit 认证标签。                                  |
-| **HKDF 哈希**                    | **SHA-256（HashLen=32 B）**               | RFC 5869。([rfc-editor.org](https://www.rfc-editor.org/rfc/rfc8032.html?utm_source=chatgpt.com)) |
-| **KEK（由混合 KDF 得）**         | **32 B**                                  | 与 A256GCM/A256KW 强度对齐。                                 |
-| **HKDF-Expand 长度（→ KEK）**    | **32 B**                                  | 产出 256-bit KEK（上行一致）。([rfc-editor.org](https://www.rfc-editor.org/rfc/rfc8032.html?utm_source=chatgpt.com)) |
-| **HKDF-Expand 长度（→ IV）**     | **12 B**                                  | 直接派生 96-bit IV。([rfc-editor.org](https://www.rfc-editor.org/rfc/rfc8032.html?utm_source=chatgpt.com)) |
-| **rid**                          | **16 B（默认）/ 32 B（可选）**            | 识别/路由用；Base64URL 表示。—                               |
-| **wind_id**                      | **16 B 随机（建议 UUIDv4）**              | UUID 总长 128 bit；v4 实际随机位 ~122 bit。([datatracker.ietf.org](https://datatracker.ietf.org/doc/rfc9562/?utm_source=chatgpt.com)) |
-| **ts（时间戳）**                 | **64-bit Unix time**                      | 实现约定。—                                                  |
-| **X25519 公钥 / 共享秘密**       | **32 B / 32 B**                           | RFC 7748。([openid-foundation-japan.github.io](https://openid-foundation-japan.github.io/rfc7638.ja.html?utm_source=chatgpt.com)) |
-| **ML-KEM-768 共享秘密**          | **32 B**                                  | FIPS 203。([datatracker.ietf.org](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-eddsa-00?utm_source=chatgpt.com)) |
-| **ML-KEM-768 封装密文（ek/ct）** | **1088 B**                                | FIPS 203 定长。([datatracker.ietf.org](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-eddsa-00?utm_source=chatgpt.com)) |
-| **Ed25519 签名**                 | **64 B**                                  | RFC 8032。([rfc-editor.org](https://www.rfc-editor.org/rfc/rfc8032.html?utm_source=chatgpt.com)) |
-| **kid（指纹）**                  | **JWK Thumbprint（SHA-256 → 32 B 摘要）** | RFC 7638。([datatracker.ietf.org](https://datatracker.ietf.org/doc/html/rfc7638?utm_source=chatgpt.com)) |
+| 项目 | 长度 | 依据 / 备注 |
+| :--- | :--- | :--- |
+| **CEK (A256GCM)** | **32 B** | NIST SP 800-38D; [[RFC 7518 §5.3](https://www.rfc-editor.org/rfc/rfc7518)] |
+| **GCM IV (Nonce)** | **12 B** | 推荐 96-bit 以获得最高效率与安全。[[NIST SP 800-38D](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf)] |
+| **GCM Tag** | **16 B** | 规定 128-bit 认证标签。[[RFC 7518](https://www.rfc-editor.org/rfc/rfc7518)] |
+| **HKDF 哈希** | **SHA-256** | HashLen=32 for SHA-256。[[RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)] |
+| **KEK** | **32 B** | 匹配 A256KW 要求的 256-bit 密钥输入。[[RFC 3394](https://www.rfc-editor.org/rfc/rfc3394)] |
+| **rid** | **16 B** | 协议自定义 (128-bit 截断哈希) |
+| **wind_id** | **16 B** | UUID v4 (128-bit)。[[RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)] |
+| **ts** | **64-bit** | 实现约定 (Unix Timestamp) |
+| **X25519 公钥** | **32 B** | 输入点格式为 32 字节。[[RFC 7748 §5](https://www.rfc-editor.org/rfc/rfc7748)] |
+| **X25519 共享密钥** | **32 B** | 输出共享秘密为 32 字节。[[RFC 7748 §5](https://www.rfc-editor.org/rfc/rfc7748)] |
+| **ML-KEM-768 共享密钥** | **32 B** | FIPS 203 (IPD) Algorithm 13。[[FIPS 203](https://csrc.nist.gov/pubs/fips/203/ipd)] |
+| **ML-KEM-768 密文** | **1088 B** | FIPS 203 (IPD) Table 2。[[FIPS 203](https://csrc.nist.gov/pubs/fips/203/ipd)] |
+| **Ed25519 签名** | **64 B** | Ed25519 签名固定长度。[[RFC 8032 §5.1.6](https://www.rfc-editor.org/rfc/rfc8032)] |
+| **kid (指纹)** | **32 B** | JWK Thumbprint SHA-256。[[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638)] |
 
 ## 验证消息:
 
@@ -187,9 +182,6 @@
 
 * **外层字段的双重绑定**：`outer.protected` 与 `outer.recipients` 已被上一条 **GCM 的 AAD** 直接认证；你又在 JWS 头加入 `jwe_protected_hash` / `jwe_recipients_hash` **再次绑定**（defense-in-depth）。任一处改动都会在 **GCM 或 JWS** 层被拒绝。
 
-
-
-
 ## 验证流程 (Verification Process)
 
 ### 1. 外层完整性校验 (Outer Integrity Check)
@@ -199,8 +191,9 @@
 1.  **AAD 一致性复核**：
     接收方独立计算收件人列表的摘要，并与报文中的 `aad` 字段比对：
     $$
-    \text{calc_aad} = \text{Base64URL}( \text{JCS}(\text{json.recipients}) )
+    \text{calc_aad} = \text{Base64URL}( \text{JCS}(\text{json.recipients}) ) 
     $$
+
     * **判定**：若 `calc_aad != json.aad`，**拒绝**（说明有人修改了收件人列表）。
 
 2.  **构建 GCM 参数**：
@@ -264,6 +257,35 @@
     * **判定**：
         * 若 `Valid` 为 `False`：**拒绝**（正文被篡改或私钥不匹配）。
 
+## 密钥材料与标识派生参数（HKDF-SHA-256）
+
+### 1) Hybrid Combiner → KEK
+- **salt**：`"wind"`
+- **info**：`"WindLetter v1 KEK | X25519Kyber768"`
+- **L**：`32`
+
+---
+
+### 2) rid（方案 A）
+> 仅用于识别/路由，不参与解密；输出使用 Base64URL（无填充）
+
+**X25519 路**
+
+- **salt**：`"wind"`
+- **info**：`"rid/x25519"`
+- **N**：`16`
+
+**ML-KEM-768 路**
+- **salt**：`"wind"`
+- **info**：`"rid/mlkem768"`
+- **N**：`16`
+
+---
+
+### 3) GCM IV
+- **IV 生成**：`Random(12 bytes, 96-bit)`
+- **说明**：不使用派生 IV（每条消息随机、独立）
+
 ## 加密解密流程
 
 ### 混合算法：X25519Kyber768 (Hybrid Combiner)
@@ -278,14 +300,15 @@
     $$(SS_{PQ}, \ ct) = \text{ML-KEM.Encap}(pk_{static}^{recv})$$
     * 将 $ct$ 填入 `recipients[i].ek`。
 4.  **混合派生 (Combiner)**：
-    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
-    * 派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。  
+    * 派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`Length=32`。
 5.  **加密 CEK**：
-    * 使用 KEK 加密 CEK：$C_{key} = \text{AES-GCM-Encrypt}(KEK, CEK)$。
+    * 使用 **A256KW** 包裹 CEK：$C_{key} = \text{AES-KeyWrap}(KEK, CEK)$。
     * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
 6.  **加密 Payload**：
     * 使用 CEK 加密内层数据：
-        $$\text{ciphertext} = \text{AES-GCM-Encrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{pt}=\text{JWS_Bytes})$$
+     $$\big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{JWS_Bytes})$$
 
 ##### 2. 解密流程 (接收方)
 1.  **识别与 ECC**：从 Header 获取发送方 ID，查找其公钥。使用 **接收方静态私钥** ($sk_{static}^{recv}$) 计算：
@@ -293,10 +316,11 @@
 2.  **PQC 恢复**：从 `recipients[i].ek` 提取密文 $ct$，解封装得到：
     $$SS_{PQ} = \text{ML-KEM.Decap}(sk_{static}^{recv}, ct)$$
 3.  **混合派生 (Combiner)**：
-    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
-    * 执行 HKDF 操作计算出 **KEK**。
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。  
+    * 执行 HKDF 操作计算出 **KEK**。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`Length=32`。
 4.  **解密 CEK**：
-    * 解开 `encrypted_key` 得到会话密钥：$CEK = \text{AES-GCM-Decrypt}(KEK, C_{key})$。
+    * 解开 `encrypted_key` 得到会话密钥：$CEK = \text{AES-KeyUnwrap}(KEK, C_{key})$。
 5.  **解密 Payload**：
     * 使用 CEK 解密外层密文得到内层数据：
         $$\text{JWS_Bytes} = \text{AES-GCM-Decrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})$$
@@ -315,14 +339,15 @@
     * 针对接收方 PQC 公钥执行封装：$(SS_{PQ}, \ ct) = \text{ML-KEM.Encap}(pk_{static}^{recv})$。
     * 将 $ct$ (1088字节) 填入 `recipients[i].ek`。*(注意：每位收件人独有一份)*
 4.  **混合派生 (Combiner)**：
-    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
-    * 派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。  
+    * 派生 KEK：$KEK = \text{HKDF-Expand}(\text{HKDF-Extract}(Salt, Z), \text{Info}, \text{Length})$。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`Length=32`。
 5.  **加密 CEK**：
-    * 使用 KEK 加密 CEK：$C_{key} = \text{AES-GCM-Encrypt}(KEK, CEK)$。
+    * 使用 **A256KW** 包裹 CEK：$C_{key} = \text{AES-KeyWrap}(KEK, CEK)$。
     * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
 6.  **加密 Payload**：
     * 使用 CEK 加密内层数据：
-        $$\text{ciphertext} = \text{AES-GCM-Encrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{pt}=\text{JWS_Bytes})$$
+      $$\big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{JWS_Bytes})$$
 
 ##### 2. 解密流程 (接收方)
 1.  **X25519 恢复**：
@@ -332,28 +357,27 @@
     * 从 `recipients[i].ek` 提取密文。
     * 解封装抗量子共享秘密：$SS_{PQ} = \text{ML-KEM.Decap}(sk_{static}^{recv}, ek)$。
 3.  **混合派生 (Combiner)**：
-    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。
-    * 执行 HKDF 操作计算出 **KEK**。
+    * 拼接秘密：$Z = SS_{ECC} \ || \ SS_{PQ}$。  
+    * 执行 HKDF 操作计算出 **KEK**。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`Length=32`。
 4.  **解密 CEK**：
-    * 使用 KEK 解密 `recipients[i].encrypted_key` 得到会话密钥：$CEK = \text{AES-GCM-Decrypt}(KEK, C_{key})$。
+    * 使用 KEK 解密 `recipients[i].encrypted_key` 得到会话密钥：$CEK = \text{AES-KeyUnwrap}(KEK, C_{key})$。
 5.  **解密 Payload**：
     * 使用 CEK 解密外层密文得到内层数据：
         $$\text{JWS_Bytes} = \text{AES-GCM-Decrypt}(\text{key}=CEK, \text{iv}=IV, \text{aad}=AAD, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})$$
 
 
-
-
-# 混淆模式下计算 rid（方案 A，salt = "wind"）
+## 混淆模式下计算 rid
 **记号**  
 - 使用 HKDF-HMAC-SHA256；`Trunc_N(·)` 取前 N 字节；输出使用 Base64URL（无填充）。  
-- 建议 `N = 16`（128-bit）；如不敏感于体积可取 `N = 32`。  
+- `N = 16`（128-bit）
 - 出处：HKDF 定义见 RFC 5869；X25519 见 RFC 7748；ML-KEM-768 见 FIPS 203。
 
 ---
 
-## 1) 发送方（写入 `recipients[i].rids`）
+### 1) 发送方（写入 `recipients[i].rids`）
 
-### X25519 路
+#### X25519 路
 生成会话秘密：
 $$
 SS_{\mathrm{ECC}}=\mathrm{X25519}\!\left(sk_{\mathrm{eph}},\ pk^{\mathrm{recv}}_{\mathrm{ecc}}\right)
@@ -367,7 +391,7 @@ rid_{\mathrm{x25519}} &= \mathrm{Base64URL}\!\Big(\mathrm{Trunc}_N\big(\mathrm{H
 \end{aligned}
 $$
 
-### ML-KEM-768 路
+#### ML-KEM-768 路
 封装并得到密文：
 $$
 (SS_{\mathrm{PQ}},\ ct_{\mathrm{PQ}})=\mathrm{MLKEM768.Encap}\!\left(pk^{\mathrm{recv}}_{\mathrm{pq}}\right)
@@ -388,7 +412,7 @@ $$
 
 ---
 
-## 2) 接收方（匹配自己的条目）
+### 2) 接收方（匹配自己的条目）
 
 逐路重算（与发送方同式）：
 
@@ -412,7 +436,7 @@ ct_eq(rid'_mlkem768, recipients[i].rids.mlkem768)
 
 ---
 
-### 3) 说明与注意
+#### 3) 说明与注意
 - 固定 `salt="wind"` 依然安全：$SS_{\mathrm{ECC}}$ 随 $epk$ 变，$SS_{\mathrm{PQ}}$ 随 $ct_{\mathrm{PQ}}$ 变，故不同消息的 $rid$ 自然不同，外部无法重算。  
 - `rid_*` 仅用于识别/路由，不参与解密或权限判定。  
 - 输出统一 **Base64URL**（无填充）；比较时使用**常量时间**比较。  
