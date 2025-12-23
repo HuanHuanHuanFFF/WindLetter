@@ -28,8 +28,7 @@
 
 #### JSON内部全部展视图
 
-> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL
-> 字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。
+> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。
 
 ```json
 {
@@ -154,6 +153,50 @@
   "tag": "<16 bytes GCM tag>"
 }
 ```
+
+## 字段设计
+参与认证
+`protected`:作为外层保护头,展示一些元信息(算法选择/传输模式)等等,在密文内部有hash值,用于校验
+`recipients`:接收人列表, JCS->add,同时在密文内部也有hash值用于校验
+`add`: 额外认证数据（Additional Authenticated Data）,参与后续AES-GCM 认证
+`iv`:AES-GCM 认证所需的随机 IV（96-bit）
+`ciphertext`:密文内容,通过解密后
+
+`ver`:当前协议发送时的版本
+`typ/cty`:协议标签,在工程和应用中起提示作用
+`wind_mode`: 传输模式,对外公开/匿名
+`enc`:内容加密算法（AEAD）,白名单可直接校验；同时进入 AAD 防止降级/替换
+`key_alg`: 密钥封装算法
+公开模式下 `kids`: 发送方各种公钥的指纹,会向外界暴露身份
+混淆模式下 `epk`:为临时的ECC公钥,接收方用自己的ECC公钥与其计算共享密钥,后续派生rid
+
+
+## 算法白名单（v1.0）
+
+v1.0 仅允许以下算法与组合（其余一律拒绝）。
+
+### 1) 密文加密套件（可选其一）
+
+- **ECC-only**
+  - `key_alg = "X25519"`
+  - `enc = "A256GCM"`
+
+- **Hybrid（ECC+PQC）**
+  - `key_alg = "X25519Kyber768"`（X25519 + ML-KEM-768）
+  - `enc = "A256GCM"`
+
+### 2) 签名（可选）
+
+- `inner_jws.protected.alg = "EdDSA"`（Ed25519）
+
+### 3) 固定依赖（不可选）
+
+- **KDF**：HKDF-SHA256（从共享秘密派生 `session_key / KEK / CEK` 等密钥材料）
+- **Hash**：SHA-256（计算绑定哈希/指纹：`jwe_protected_hash / jwe_recipients_hash` 等）
+- **JSON 规范化**：JCS（RFC 8785，用于对 JSON 做一致序列化，保证哈希输入可复现）
+- **Key Wrap**：A256KW（AES Key Wrap，用 `KEK` 包装/解包 `CEK`，写入 `encrypted_key`）
+- **编码**：Base64URL（无填充，用于字段传输编码：`iv / tag / ciphertext / signature` 等）
+- **标识**：UUID v4（`wind_id`，用于消息标识/去重/追踪）
 
 ## 长度规范
 
