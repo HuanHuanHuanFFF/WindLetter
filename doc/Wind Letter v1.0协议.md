@@ -155,21 +155,51 @@
 ```
 
 ## 字段设计
-参与认证
+认证与绑定
 `protected`:作为外层保护头,展示一些元信息(算法选择/传输模式)等等,在密文内部有hash值,用于校验
 `recipients`:接收人列表, JCS->add,同时在密文内部也有hash值用于校验
-`add`: 额外认证数据（Additional Authenticated Data）,参与后续AES-GCM 认证
+`add`:用于验证recipients,也参与后续 AES-GCM 认证
 `iv`:AES-GCM 认证所需的随机 IV（96-bit）
-`ciphertext`:密文内容,通过解密后
+`ciphertext`:密文内容,通过解密后得到,内部有protected和recipients的hash值,用于绑定外层进行校验
+jwe_protected_hash,jwe_recipients_hash : 用于绑定验证
+tag: AES-GCM认证所需的tag
+通过这些,可以做到传输过程中1bit不改,无法进行换壳攻击
 
+其他元信息字段
 `ver`:当前协议发送时的版本
 `typ/cty`:协议标签,在工程和应用中起提示作用
 `wind_mode`: 传输模式,对外公开/匿名
 `enc`:内容加密算法（AEAD）,白名单可直接校验；同时进入 AAD 防止降级/替换
 `key_alg`: 密钥封装算法
-公开模式下 `kids`: 发送方各种公钥的指纹,会向外界暴露身份
-混淆模式下 `epk`:为临时的ECC公钥,接收方用自己的ECC公钥与其计算共享密钥,后续派生rid
+recipients.encrypted_key: 通过(x.x)算出CEK(密文密钥),然后进行AES-GCM解密即可得到ciphertext密文
 
+公开模式下 
+`kids`: 发送方各种公钥的指纹,会向外界暴露发件人身份
+recipients.kids : 接收者指纹,会向外界暴露收件人身份
+recipients.ek:公开模式下,两个联系人算出的ek不会变,也会暴露身份
+
+混淆模式下,发件人匿名,仅在签名的情况下,解密后知道身份
+`epk`:发送方随机生成的临时ECC公钥,接收方用自己的ECC公钥与其计算共享密钥,后续派生rid
+recipients.ek: 发送方临时生成的Kyber密钥再经过(x.x)加密得到,用于确认接收人身份(只有收件人知道,对外匿名)
+recipients.rid:通过 后面(x.x)的流程计算得到rid确认收件人身份(只有收件人知道,对外匿名)
+
+密文内容(ciphertext内部)
+typ:版本/结构信息
+ts: 加密信息时的时间戳,展示给用户,可防重放攻击
+wind_id:每条消息唯一UUID,用于防重放攻击
+`jwe_*_hash` : 用于绑定验证外壳
+签名时才有,用于认证发送者信息,不签名时无这几项
+alg: 签名的算法,用于加密,认证签名
+kid: 发件人签名公钥kid
+signature: 签名加密后的信息
+
+playload,业务信息
+meta:
+content_type:密文信息的文件格式
+original_size: 密文信息原始长度
+body:
+type:文件格式
+text:密文信息
 
 ## 算法白名单（v1.0）
 
