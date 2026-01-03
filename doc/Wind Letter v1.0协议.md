@@ -21,7 +21,7 @@
     }
   ],
   "iv": "BASE64URL(GCM_IV_12bytes)",
-  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_JWS_bytes, key=CEK, iv=IV, aad=ASCII(protected_b64+\".\"+aad)))",
+  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_JWS_bytes, key=CEK, iv=IV, aad=ASCII(outer.protected+\".\"+outer.aad)))",
   "tag": "BASE64URL(GCM_tag_16bytes)"
 }
 ```
@@ -43,7 +43,7 @@
       "x25519": "BASE64URL(kid-ecc-sender)"
     }
   },
-  "aad": "BASE64URL( JCS(recipients) )",
+  "aad": "BASE64URL(JCS(recipients))",
   "recipients": [
     {
       "kids": {
@@ -62,17 +62,16 @@
       "kid": "<sender-kid>",
       "ts": 1731800000,
       "wind_id": "<wind-id>",
-      "jwe_protected_hash": "<BASE64URL(SHA256(JCS(out.protected_json)))>",
+      "jwe_protected_hash": "<BASE64URL(SHA256(JCS(protected_json)))>",
       "jwe_recipients_hash": "<BASE64URL(SHA256(JCS(outer.recipients)))>"
     },
     "payload": {
       "meta": {
-        "content_type": "text/utf-8",
+        "content_type": "text/plain; charset=utf-8",
         "original_size": 3210
       },
       "body": {
-        "type": "text",
-        "text": "Hello, Wind-Letter!"
+        "data": "<BASE64URL(raw_bytes)>"
       }
     },
     "signature": "<Ed25519(signature)>"
@@ -97,7 +96,7 @@
     }
   ],
   "iv": "BASE64URL(GCM_IV_12bytes)",
-  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_JWS_bytes, key=CEK, iv=IV, aad=ASCII(protected_b64+\".\"+aad)))",
+  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_JWS_bytes, key=CEK, iv=IV, aad=ASCII(outer.protected+\".\"+outer.aad)))",
   "tag": "BASE64URL(GCM_tag_16bytes)"
 }
 ```
@@ -119,7 +118,7 @@
       "x": "<Sender_Ephemeral_Public_Key: bytes>"
     }
   },
-  "aad": "BASE64URL( JCS(recipients) )",
+  "aad": "BASE64URL(JCS(recipients))",
   "recipients": [
     {
       "rid": "<rid_hybrid: 16 bytes>",
@@ -135,17 +134,16 @@
       "kid": "<sender-kid>",
       "ts": 1731800000,
       "wind_id": "<wind-id>",
-      "jwe_protected_hash": "<BASE64URL(SHA256(JCS(out.protected_json)))>",
+      "jwe_protected_hash": "<BASE64URL(SHA256(JCS(protected_json)))>",
       "jwe_recipients_hash": "<BASE64URL(SHA256(JCS(outer.recipients)))>"
     },
     "payload": {
       "meta": {
-        "content_type": "text/utf-8",
+        "content_type": "text/plain; charset=utf-8",
         "original_size": 3210
       },
       "body": {
-        "type": "text",
-        "text": "Hello, Wind-Letter!"
+        "data": "<BASE64URL(raw_bytes)>"
       }
     },
     "signature": "<Ed25519(signature)>"
@@ -199,7 +197,7 @@ content_type:密文信息的文件格式
 original_size: 密文信息原始长度
 body:
 type:文件格式
-text:密文信息
+data:密文信息
 
 ## 算法白名单（v1.0）
 
