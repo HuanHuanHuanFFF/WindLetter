@@ -153,51 +153,46 @@
 ```
 
 ## 字段设计
-认证与绑定
-`protected`:作为外层保护头,展示一些元信息(算法选择/传输模式)等等,在密文内部有hash值,用于校验
-`recipients`:接收人列表, JCS->add,同时在密文内部也有hash值用于校验
-`add`:用于验证recipients,也参与后续 AES-GCM 认证
-`iv`:AES-GCM 认证所需的随机 IV（96-bit）
-`ciphertext`:密文内容,通过解密后得到,内部有protected和recipients的hash值,用于绑定外层进行校验
-jwe_protected_hash,jwe_recipients_hash : 用于绑定验证
-tag: AES-GCM认证所需的tag
-通过这些,可以做到传输过程中1bit不改,无法进行换壳攻击
+### 认证与绑定
+> 通过这些机制，可以做到传输过程中 1 bit 不改，避免换壳攻击（外层字段被 GCM + 内层 hash 双重约束）。
+- `protected`：外层保护头（算法/模式等元信息）；被 GCM 认证；内层用 `jwe_protected_hash` 绑定它。
+- `recipients`：收件人入口列表；其 JCS 用于算 `aad`；内层用 `jwe_recipients_hash` 绑定它。
+- `aad`：`BASE64URL(JCS(recipients))`，让 `recipients` 也进入 GCM 认证范围。
+- `iv`：AES-GCM 的随机 IV（12 bytes）。
+- `ciphertext`：AES-GCM 密文（明文是内层 `JWS_Bytes`；展开视图里显示解密后的对象）。
+- `tag`：AES-GCM 认证标签（16 bytes）。
+- `jwe_protected_hash / jwe_recipients_hash`：内层签名内的“外壳指纹”，防换壳/转投。
 
-其他元信息字段
-`ver`:当前协议发送时的版本
-`typ/cty`:协议标签,在工程和应用中起提示作用
-`wind_mode`: 传输模式,对外公开/匿名
-`enc`:内容加密算法（AEAD）,白名单可直接校验；同时进入 AAD 防止降级/替换
-`key_alg`: 密钥封装算法
-recipients.encrypted_key: 通过(x.x)算出CEK(密文密钥),然后进行AES-GCM解密即可得到ciphertext密文
+### 外层 `protected` 内字段
+- `ver`：协议版本。
+- `typ/cty`：协议标签与内容类型提示（工程路由用）。
+- `wind_mode`：传输模式（public / obfuscation）。
+- `enc`：AEAD 算法（白名单校验）。
+- `key_alg`：密钥封装组合（ECC-only / Hybrid）。
 
-公开模式下 
-`kids`: 发送方各种公钥的指纹,会向外界暴露发件人身份
-recipients.kids : 接收者指纹,会向外界暴露收件人身份
-recipients.ek:公开模式下,两个联系人算出的ek不会变,也会暴露身份
+### 公开模式（public）
+- `protected.kids.x25519`：发送方 X25519 公钥 kid（暴露发件人）。
+- `recipients[i].kids.x25519`：接收方 X25519 公钥 kid（暴露收件人）。
+- `recipients[i].kids.mlkem768`：接收方 ML-KEM-768 公钥 kid（暴露收件人）。
+- `recipients[i].ek`：ML-KEM 封装密文（每消息/每收件人一份）。
+- `recipients[i].encrypted_key`：用 `KEK` 包装的 `CEK`（unwrap 得到 CEK）。
 
-混淆模式下,发件人匿名,仅在签名的情况下,解密后知道身份
-`epk`:发送方随机生成的临时ECC公钥,接收方用自己的ECC公钥与其计算共享密钥,后续派生rid
-recipients.ek: 发送方临时生成的Kyber密钥再经过(x.x)加密得到,用于确认接收人身份(只有收件人知道,对外匿名)
-recipients.rid:通过 后面(x.x)的流程计算得到rid确认收件人身份(只有收件人知道,对外匿名)
+### 混淆模式（obfuscation）
+- `protected.epk.kty/crv/x`：发送方临时 X25519 公钥（参与共享秘密与派生）。
+- `recipients[i].rid`：收件人指纹（对外匿名，用于快速匹配 entry）。
+- `recipients[i].ek`：ML-KEM 封装密文（收件人解封装得到 PQ 共享秘密）。
+- `recipients[i].encrypted_key`：用 `KEK` 包装的 `CEK`。
 
-密文内容(ciphertext内部)
-typ:版本/结构信息
-ts: 加密信息时的时间戳,展示给用户,可防重放攻击
-wind_id:每条消息唯一UUID,用于防重放攻击
-`jwe_*_hash` : 用于绑定验证外壳
-签名时才有,用于认证发送者信息,不签名时无这几项
-alg: 签名的算法,用于加密,认证签名
-kid: 发件人签名公钥kid
-signature: 签名加密后的信息
+### 内层（解密后得到）
+- `ciphertext.protected.ts`：时间戳，展示给用户（也可用于防重放）。
+- `ciphertext.protected.wind_id`：消息 ID（上层可用于去重/反重放）。
+- `ciphertext.protected.alg/kid/signature`：签名算法/公钥标识/签名值（启用签名时才有）。
 
-playload,业务信息
-meta:
-content_type:密文信息的文件格式
-original_size: 密文信息原始长度
-body:
-type:文件格式
-data:密文信息
+### payload
+- `payload.meta.content_type`：MIME（如何解释 data）。
+- `payload.meta.original_size`：原始字节长度。
+- `payload.body.data`：原始 bytes 的 Base64URL（无填充）。
+
 
 ## 算法白名单（v1.0）
 
