@@ -446,6 +446,104 @@ $$
 
 ## 加密解密流程
 
+### 纯 ECC：X25519 (ECC-only)
+
+#### 1. 公开模式 (Public Mode)
+
+##### 1. 加密流程 (发送方)
+
+1. **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
+2. **ECC 计算**：使用 **发送方静态私钥** ($sk_{static}^{sender}$) 和 **接收方静态公钥** ($pk_{static}^{recv}$) 计算：
+   $$SS_{ECC}=\text{X25519}(sk_{static}^{sender},pk_{static}^{recv})$$
+3. **派生 KEK**：
+    * 共享输入：$Z=SS_{ECC}$。
+    * 派生：$KEK=\text{HKDF-Expand}(\text{HKDF-Extract}(\text{salt},Z),\text{info},L)$。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519"`；`L=32`。
+4. **加密 CEK**：
+    * 使用 **A256KW** 包裹 CEK：$C_{key}=\text{AES-KeyWrap}(KEK,CEK)$。
+    * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
+    * **注意**：ECC-only **不使用** PQC 封装，`recipients[i].ek` **必须省略**（MUST NOT 出现）。
+5. **生成 AAD**：
+    * 规范化 `recipients`：`JCS(recipients)`。
+    * `AAD = Base64URL(JCS(recipients))`（用于绑定外层与 recipients，防换壳/篡改）。
+6. **加密 Payload**：
+    * 使用 CEK 加密内层数据：
+      $$
+      \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{JWS}\_\text{Bytes})
+      $$
+
+##### 2. 解密流程 (接收方)
+
+1. **识别与 ECC**：从 Header 获取发送方 ID（或 `kid`），查找其公钥。使用 **接收方静态私钥** ($sk_{static}^{recv}$) 计算：
+   $$SS_{ECC}=\text{X25519}(sk_{static}^{recv},pk_{static}^{sender})$$
+2. **派生 KEK**：
+    * $Z=SS_{ECC}$，按同参数执行 HKDF 得到 **KEK**。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519"`；`L=32`。
+3. **解密 CEK**：
+    * 解开 `encrypted_key` 得到会话密钥：$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$。
+4. **解密 Payload**：
+    * 使用 CEK 解密外层密文得到内层数据：
+      $$
+      \text{JWS}\_\text{Bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+      $$
+
+---
+
+#### 2. 混淆模式 (Obfuscation Mode)
+
+##### 1. 加密流程 (发送方)
+
+1. **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
+2. **X25519 协商**：
+    * 生成临时密钥对 $(sk_{eph},pk_{eph})$。
+    * 计算共享秘密：$SS_{ECC}=\text{X25519}(sk_{eph},pk_{static}^{recv})$。
+    * 将 $pk_{eph}$ 填入 `protected.epk`。
+3. **计算路由指纹 (rid)**：
+    * 输入：$IKM_{rid}=SS_{ECC}$。
+    * 计算指纹（取 16 字节）：
+      $$
+      rid=\text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{salt="wind"},IKM_{rid}),\ \text{info="rid/ecc"},\ L=16\big)
+      $$
+    * 将 $rid$ 填入 `recipients[i].rid`。
+4. **派生 KEK**：
+    * $Z=SS_{ECC}$。
+    * **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519"`；`L=32`。
+5. **加密 CEK**：
+    * 使用 **A256KW** 包裹 CEK：$C_{key}=\text{AES-KeyWrap}(KEK,CEK)$。
+    * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
+    * **注意**：ECC-only 下 `recipients[i].ek` **必须省略**（MUST NOT 出现）。
+6. **生成 AAD**：
+    * `AAD = Base64URL(JCS(recipients))`。
+7. **加密 Payload**：
+    * 使用 CEK 加密内层数据：
+      $$
+      (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{JWS}\_\text{Bytes})
+      $$
+
+##### 2. 解密流程 (接收方)
+
+1. **X25519 恢复**：
+    * 从 `protected.epk` 提取发送方临时公钥。
+    * 计算共享秘密：$SS_{ECC}=\text{X25519}(sk_{static}^{recv},pk_{eph})$。
+2. **校验路由指纹 (rid Check)**：
+    * 输入：$IKM_{rid}=SS_{ECC}$。
+    * 本地重算：
+      $$
+      rid_{check}=\text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{salt="wind"},IKM_{rid}),\ \text{info="rid/ecc"},\ L=16\big)
+      $$
+    * 比对：将 $rid_{check}$ 与消息中的 `recipients[i].rid` 进行**常量时间比较**。
+    * 判定：若不匹配，跳过该条目（混淆模式推荐静默丢弃）；若匹配，继续执行后续步骤。
+3. **派生 KEK**：
+    * $Z=SS_{ECC}$，按同参数执行 HKDF 得到 **KEK**。  
+      **参数**：`salt="wind"`；`info="WindLetter v1 KEK | X25519"`；`L=32`。
+4. **解密 CEK**：
+    * 使用 KEK 解密 `recipients[i].encrypted_key` 得到会话密钥：$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$。
+5. **解密 Payload**：
+    * 使用 CEK 解密外层密文得到内层数据：
+      $$
+      \text{JWS}\_\text{Bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+      $$
+
 ### 混合算法：X25519Kyber768 (Hybrid Combiner)
 
 #### 1. 公开模式 (Public Mode)
