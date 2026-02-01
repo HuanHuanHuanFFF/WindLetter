@@ -1,156 +1,8 @@
 # Wind Letter v1.0协议
 
-## 0. 总览(协议传输通用JSON)
+## 0. 总览 (协议传输JSON) 
 
-### 公开模式
-
-#### 传输唯一结构,通用JSON
-
-```json
-{
-  "protected": "BASE64URL({\"typ\":\"wind+jwe\",\"cty\":\"wind+jws\",\"ver\":\"1.0\",\"wind_mode\":\"public\",\"enc\":\"A256GCM\",\"key_alg\":\"X25519Kyber768\",\"kids\":{\"x25519\":\"BASE64URL(kid-ecc-sender)\"}})",
-  "aad": "BASE64URL(JCS(recipients))",
-  "recipients": [
-    {
-      "kids": {
-        "x25519": "BASE64URL(kid-ecc-recv)",
-        "mlkem768": "BASE64URL(kid-pq-recv)"
-      },
-      "ek": "BASE64URL(mlkem_ct_for_this_recipient)",
-      "encrypted_key": "BASE64URL(wrap(CEK))"
-    }
-  ],
-  "iv": "BASE64URL(GCM_IV_12bytes)",
-  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_JWS_bytes, key=CEK, iv=IV, aad=ASCII(outer.protected+\".\"+outer.aad)))",
-  "tag": "BASE64URL(GCM_tag_16bytes)"
-}
-```
-
-#### JSON内部全部展视图
-
-> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。
-
-```json
-{
-  "protected": {
-    "typ": "wind+jwe",
-    "cty": "wind+jws",
-    "ver": "1.0",
-    "wind_mode": "public",
-    "enc": "A256GCM",
-    "key_alg": "X25519Kyber768",
-    "kids": {
-      "x25519": "BASE64URL(kid-ecc-sender)"
-    }
-  },
-  "aad": "BASE64URL(JCS(recipients))",
-  "recipients": [
-    {
-      "kids": {
-        "x25519": "BASE64URL(kid-ecc-recv)",
-        "mlkem768": "BASE64URL(kid-pq-recv)"
-      },
-      "ek": "<MLKEM768_Ciphertext_Encapsulation: 1088 bytes>",
-      "encrypted_key": "<wrap(CEK)>"
-    }
-  ],
-  "iv": "BASE64URL(GCM-IV)",
-  "ciphertext": {
-    "protected": {
-      "typ": "wind+jws",
-      "alg": "EdDSA",
-      "kid": "<sender-kid>",
-      "ts": 1731800000,
-      "wind_id": "<wind-id>",
-      "jwe_protected_hash": "<BASE64URL(SHA256(JCS(protected_json)))>",
-      "jwe_recipients_hash": "<BASE64URL(SHA256(JCS(outer.recipients)))>"
-    },
-    "payload": {
-      "meta": {
-        "content_type": "text/plain; charset=utf-8",
-        "original_size": 3210
-      },
-      "body": {
-        "data": "<BASE64URL(raw_bytes)>"
-      }
-    },
-    "signature": "<Ed25519(signature)>"
-  },
-  "tag": "<16 bytes GCM tag>"
-}
-```
-
-### 混淆模式
-
-#### 传输唯一结构,通用JSON
-
-```json
-{
-  "protected": "BASE64URL({\"typ\":\"wind+jwe\",\"cty\":\"wind+jws\",\"ver\":\"1.0\",\"wind_mode\":\"obfuscation\",\"enc\":\"A256GCM\",\"key_alg\":\"X25519Kyber768\",\"epk\":{\"kty\":\"OKP\",\"crv\":\"X25519\",\"x\":\"BASE64URL(Sender_Ephemeral_Public_Key)\"}})",
-  "aad": "BASE64URL(JCS(recipients))",
-  "recipients": [
-    {
-      "rid": "BASE64URL(rid_hybrid_16bytes)",
-      "ek": "BASE64URL(MLKEM768_Ciphertext_Encapsulation_for_this_recipient)",
-      "encrypted_key": "BASE64URL(wrap(CEK))"
-    }
-  ],
-  "iv": "BASE64URL(GCM_IV_12bytes)",
-  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_JWS_bytes, key=CEK, iv=IV, aad=ASCII(outer.protected+\".\"+outer.aad)))",
-  "tag": "BASE64URL(GCM_tag_16bytes)"
-}
-```
-
-#### JSON内部全部展视图
-
-```json
-{
-  "protected": {
-    "typ": "wind+jwe",
-    "cty": "wind+jws",
-    "ver": "1.0",
-    "wind_mode": "obfuscation",
-    "enc": "A256GCM",
-    "key_alg": "X25519Kyber768",
-    "epk": {
-      "kty": "OKP",
-      "crv": "X25519",
-      "x": "<Sender_Ephemeral_Public_Key: bytes>"
-    }
-  },
-  "aad": "BASE64URL(JCS(recipients))",
-  "recipients": [
-    {
-      "rid": "<rid_hybrid: 16 bytes>",
-      "ek": "<MLKEM768_Ciphertext_Encapsulation: 1088 bytes>",
-      "encrypted_key": "<wrap(CEK)>"
-    }
-  ],
-  "iv": "BASE64URL(GCM-IV)",
-  "ciphertext": {
-    "protected": {
-      "typ": "wind+jws",
-      "alg": "EdDSA",
-      "kid": "<sender-kid>",
-      "ts": 1731800000,
-      "wind_id": "<wind-id>",
-      "jwe_protected_hash": "<BASE64URL(SHA256(JCS(protected_json)))>",
-      "jwe_recipients_hash": "<BASE64URL(SHA256(JCS(outer.recipients)))>"
-    },
-    "payload": {
-      "meta": {
-        "content_type": "text/plain; charset=utf-8",
-        "original_size": 3210
-      },
-      "body": {
-        "data": "<BASE64URL(raw_bytes)>"
-      }
-    },
-    "signature": "<Ed25519(signature)>"
-  },
-  "tag": "<16 bytes GCM tag>"
-}
-```
+**见附录**
 
 ## 字段设计
 ### 认证与绑定
@@ -159,7 +11,7 @@
 - `recipients`：收件人入口列表；其 JCS 用于算 `aad`；内层用 `jwe_recipients_hash` 绑定它。
 - `aad`：`BASE64URL(JCS(recipients))`，让 `recipients` 也进入 GCM 认证范围。
 - `iv`：AES-GCM 的随机 IV（12 bytes）。
-- `ciphertext`：AES-GCM 密文（明文是内层 `JWS_Bytes`；展开视图里显示解密后的对象）。
+- `ciphertext`：AES-GCM 密文（明文是内层 `inner_bytes`；展开视图里显示解密后的对象）。
 - `tag`：AES-GCM 认证标签（16 bytes）。
 - `jwe_protected_hash / jwe_recipients_hash`：内层签名内的“外壳指纹”，防换壳/转投。
 
@@ -171,9 +23,9 @@
 - `key_alg`：密钥封装组合（ECC-only / Hybrid）。
 
 ### 公开模式（public）
-- `protected.kids.x25519`：发送方 X25519 公钥 kid（暴露发件人）。
-- `recipients[i].kids.x25519`：接收方 X25519 公钥 kid（暴露收件人）。
-- `recipients[i].kids.mlkem768`：接收方 ML-KEM-768 公钥 kid（暴露收件人）。
+- `protected.kid.x25519`：发送方 X25519 公钥 kid（暴露发件人）。
+- `recipients[i].kid.x25519`：接收方 X25519 公钥 kid（暴露收件人）。
+- `recipients[i].kid.mlkem768`：接收方 ML-KEM-768 公钥 kid（暴露收件人）。
 - `recipients[i].ek`：ML-KEM 封装密文（每消息/每收件人一份）。
 - `recipients[i].encrypted_key`：用 `KEK` 包装的 `CEK`（unwrap 得到 CEK）。
 
@@ -186,7 +38,7 @@
 ### 内层（解密后得到）
 - `ciphertext.protected.ts`：时间戳，展示给用户（也可用于防重放）。
 - `ciphertext.protected.wind_id`：消息 ID（上层可用于去重/反重放）。
-- `ciphertext.protected.alg/kid/signature`：签名算法/公钥标识/签名值（启用签名时才有）。
+- `ciphertext.protected.alg/kid`：签名算法/公钥标识（启用签名时才有）；`ciphertext.signature`：签名值（启用签名时才有）。
 
 ### payload
 - `payload.meta.content_type`：MIME（如何解释 data）。
@@ -251,6 +103,45 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
 > 总规则：本表中长度均指“原始字节”；传输字段统一 Base64URL（无填充），除非特别声明为 UUID 文本。
 
 ## 签名流程 (Signature Process)
+
+### 0. 可选是否签名
+
+若选择不签名，则需要改动部分结构，改动如下；验证时无需验签，但依然能保证传输过程中一字不改。
+
+- 外层：`outer.protected.cty="wind+inner"`
+- 内层：`ciphertext.protected.typ="wind+inner"`，并省略 `ciphertext.protected.alg` / `ciphertext.protected.kid` / `ciphertext.signature`
+
+外层（outer.protected）补丁：
+```json
+{
+  "cty": "wind+inner"
+}
+```
+
+内层（ciphertext）结构：
+```json
+{
+  "protected": {
+    "typ": "wind+inner",
+    "ts": 1731800000,
+    "wind_id": "<uuid_v4>",
+    "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+    "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+  },
+  "payload": {
+    "meta": {
+      "content_type": "text/plain; charset=utf-8",
+      "original_size": 3210
+    },
+    "body": {
+      "data": "BASE64URL(payload_bytes)"
+    }
+  }
+}
+```
+
+
+以下各小节（1~3）仅适用于**签名模式**（`cty="wind+jws"`）；未签名模式无需构建/验签 `ciphertext.signature`。
 
 ### 1. 准备绑定数据 (Binding Preparation)
 
@@ -341,7 +232,7 @@ $$
 * **外层 AES-GCM 认证范围**：`ciphertext`、`tag` 与 **AAD**（JWE 规定的 `ASCII(base64url(protected) + "." + aad)`），并且 *
   *标签计算依赖 `iv`**。因此 `protected_b64`、`aad`、`iv`、`ciphertext` 任一比特被改，**GCM 验证失败**（除去随标签长度而来的可忽略伪造概率）。
 
-* **内层 JWS 认证范围**：`ciphertext.protected` 与 `ciphertext.payload`（以及对应的 `signature` 校验）。这两者任何一处改 1
+* **内层认证范围（Signed 时）**：`ciphertext.protected` 与 `ciphertext.payload`（以及对应的 `signature` 校验）。这两者任何一处改 1
   bit，**JWS 验签失败**。
 
 * **外层字段的双重绑定**：`outer.protected` 与 `outer.recipients` 已被上一条 **GCM 的 AAD** 直接认证；你又在 JWS 头加入
@@ -371,16 +262,16 @@ $$
 3. **AES-GCM 解密与验真**：
    执行解密操作（此步骤隐含了 Tag 校验）：
    $$
-   \text{JWS}\_\text{Bytes} = \text{AES-GCM-Decrypt}(\text{key}=\text{CEK}, \text{iv}=\text{IV}, \text{aad}=\text{AAD}_{\text{bytes}}, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})$$
+   \text{inner}\_\text{bytes} = \text{AES-GCM-Decrypt}(\text{key}=\text{CEK}, \text{iv}=\text{IV}, \text{aad}=\text{AAD}_{\text{bytes}}, \text{ct}=\text{ciphertext}, \text{tag}=\text{tag})$$
     * **判定**：若解密抛出异常（Tag 校验失败），**拒绝**（说明密文、Tag 或 AAD 被篡改）。
-    * **成功**：获得内层明文 `JWS_Bytes`。
+    * **成功**：获得内层明文 `inner_bytes`。
 
 ### 2. 内外层绑定校验 (Binding Check)
 
-**目标**：防止“换壳攻击”（攻击者将合法内层 JWS 放入伪造外层 JWE 中）。
+**目标**：防止“换壳攻击”（攻击者将合法内层消息放入伪造外层 JWE 中）。
 
 1. **提取内层绑定指纹**：
-    - 从内层 JWS Header 读取 `jwe_protected_hash` 与 `jwe_recipients_hash`。
+    - 从内层 `ciphertext.protected` 读取 `jwe_protected_hash` 与 `jwe_recipients_hash`。
 
 2. **计算期望指纹 (Expected Fingerprints)**：
     - `protected_json = JSON.parse(Base64URL_Decode(outer.protected))`
@@ -400,6 +291,8 @@ $$
     - 任一不匹配则 **拒绝**（外壳与内芯不再绑定，疑似被替换）。
 
 ### 3. 来源认证与签名校验 (Signature Verification)
+
+**仅当** `protected_json.cty="wind+jws"` 时执行本节；若 `cty="wind+inner"`，则跳过本节（不验签）。
 
 **目标**：确认发件人身份，并确保业务正文 (Payload) 未被篡改。
 
@@ -472,6 +365,25 @@ $$
 - KEK-HKDF：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`L=32`
 - rid-HKDF：`salt="wind"`；`info="rid/hybrid"`；`L=16`，输入 $IKM_{rid}=SS_{ECC}\ ||\ SS_{PQ}$
 
+#### C) 内层类型差异：是否签名 (Inner Type)
+
+- 本项与 `key_alg` 无关，仅影响 `outer.protected.cty`、`inner_bytes` 结构与后续验证步骤。
+- **签名模式 (Signed)**  
+  - `outer.protected.cty="wind+jws"`
+  - `inner_bytes` 为 **wind+jws**（JWS 对象序列化字节）
+  - `ciphertext.protected.alg="EdDSA"` **必须存在**
+  - `ciphertext.protected.kid="BASE64URL(kid-ed25519-sender)"` **必须存在**
+  - `ciphertext.signature` **必须存在**
+  - 接收方：外层解密后执行 **绑定校验 + Ed25519 验签**
+- **未签名模式 (Unsigned)**  
+  - `outer.protected.cty="wind+inner"`
+  - `inner_bytes` 为 **wind+inner**（未签名 inner 对象序列化字节）
+  - `ciphertext.protected.alg` **必须省略**
+  - `ciphertext.protected.kid` **必须省略**
+  - `ciphertext.signature` **必须省略**
+  - 接收方：外层解密后仅执行 **绑定校验**，跳过验签
+- 若 `cty` 不在上述枚举中，视为 **InvalidMessage**。
+
 ---
 
 ### 1. 公开模式 (Public Mode) —— 通用流程
@@ -483,8 +395,10 @@ $$
    $$SS_{ECC}=\text{X25519}(sk_{static}^{sender},pk_{static}^{recv})$$
 3. **PQC 封装（仅 Hybrid）**：若算法为 Hybrid，执行：
    $$(SS_{PQ},\ ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$$
+   
    * 将 $ct$ 填入 `recipients[i].ek`；若算法为 ECC-only，则本步跳过且 `recipients[i].ek` 必须省略。
 4. **混合派生 / 派生 KEK（按算法差异）**：
+   
    * 组装秘密：$Z$ 按“算法差异”取值（ECC-only：$SS_{ECC}$；Hybrid：$SS_{ECC}||SS_{PQ}$）。
    * 派生：$KEK=\text{HKDF-Expand}(\text{HKDF-Extract}(\text{salt},Z),\text{info},L)$。  
      **参数**：`salt="wind"`；`info` 按算法差异；`L=32`。
@@ -497,7 +411,7 @@ $$
 7. **加密 Payload**：
    * 使用 CEK 加密内层数据：
      $$
-     \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{JWS}\_\text{Bytes})
+     \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{inner}\_\text{bytes})
      $$
 
 #### 2. 解密流程 (接收方)
@@ -511,11 +425,12 @@ $$
    * 组装 $Z$（同发送方）。
    * `salt="wind"`；`info` 按算法差异；`L=32`。
 4. **解密 CEK**：
+   
    * 解开 `encrypted_key` 得到会话密钥：$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$。
 5. **解密 Payload**：
    * 使用 CEK 解密外层密文得到内层数据：
      $$
-     \text{JWS}\_\text{Bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+     \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
      $$
 
 ---
@@ -531,6 +446,7 @@ $$
    * 将 $pk_{eph}$ 填入 `protected.epk`。
 3. **ML-KEM 封装（仅 Hybrid）**：若算法为 Hybrid，执行：
    $$(SS_{PQ},\ ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$$
+   
    * 将 $ct$ 填入 `recipients[i].ek`；若算法为 ECC-only，则本步跳过且 `recipients[i].ek` 必须省略。
 4. **计算路由指纹 (rid)（按算法差异）**：
    * 输入 $IKM_{rid}$ 按算法差异取值（ECC-only：$SS_{ECC}$；Hybrid：$SS_{ECC}||SS_{PQ}$）。
@@ -544,11 +460,12 @@ $$
    * 组装 $Z$（同上）。
    * `salt="wind"`；`info` 按算法差异；`L=32`。
 6. **加密 CEK**：
+   
    * $C_{key}=\text{AES-KeyWrap}(KEK,CEK)$，写入 `recipients[i].encrypted_key`。
 7. **生成 AAD**：`AAD = Base64URL(JCS(recipients))`。
 8. **加密 Payload**：
    $$
-   (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{JWS}\_\text{Bytes})
+   (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{inner}\_\text{bytes})
    $$
 
 #### 2. 解密流程 (接收方)
@@ -564,7 +481,7 @@ $$
    $$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$$
 5. **解密 Payload**：
    $$
-   \text{JWS}\_\text{Bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+   \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
    $$
 
 ## 混淆模式下计算 rid
@@ -654,7 +571,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 
 ## 错误处理
 
-- `rid` 未匹配到任何 `recipients[i]`：视为 **NotForMe**，直接忽略。
+- 未匹配到任何 `recipients[i]`视为未找到对应密钥。
 - 校验失败 (解封装失败 / GCM tag 失败 / 绑定失败 / 验签失败) 均视为 **InvalidMessage**。
 - 对外返回统一错误，不区分失败原因。
 - 日志仅记录本地调试信息（不可回显给对端），避免泄露密钥命中/身份线索。
@@ -670,3 +587,261 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 - 注意：混淆模式仍可能受到**流量分析**影响 (例如报文大小、发送频率、时间关联、网络侧关联等) 。
 ### 4. 适用范围与安全经济学
 - 此协议配合良好的信息安全习惯可显著提高攻击成本，对高资源对手依然无法保证安全，在一般威胁模型下提供合理安全性。
+
+
+## 附录
+
+### 0.传输唯一结构,通用JSON
+
+```json
+{
+  "protected": "BASE64URL({\"typ\":\"wind+jwe\",\"cty\":\"wind+jws\",\"ver\":\"1.0\",\"wind_mode\":\"public\",\"enc\":\"A256GCM\",\"key_alg\":\"X25519Kyber768\",\"kid\":{\"x25519\":\"BASE64URL(kid-ecc-sender)\"}})",
+  "aad": "BASE64URL(JCS(recipients))",
+  "recipients": [
+    {
+      "kid": {
+        "x25519": "BASE64URL(kid-ecc-recv)",
+        "mlkem768": "BASE64URL(kid-pq-recv)"
+      },
+      "ek": "BASE64URL(mlkem_ct_for_this_recipient)",
+      "encrypted_key": "BASE64URL(wrap(CEK))"
+    }
+  ],
+  "iv": "BASE64URL(GCM_IV_12bytes)",
+  "ciphertext": "BASE64URL(AES256GCM(plaintext=inner_bytes, key=CEK, iv=IV, aad=ASCII(outer.protected+\".\"+outer.aad)))",
+  "tag": "BASE64URL(GCM_tag_16bytes)"
+}
+```
+### JSON内部全部展视图
+
+> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。
+>
+> ### 1. 公开模式 +  ECC-only（X25519）
+
+```json
+{
+  "protected": {
+    "typ": "wind+jwe",
+    "cty": "wind+jws",
+    "ver": "1.0",
+    "wind_mode": "public",
+    "enc": "A256GCM",
+    "key_alg": "X25519",
+    "kid": {
+      "x25519": "BASE64URL(kid-ecc-sender)"
+    }
+  },
+  "aad": "BASE64URL(JCS(recipients))",
+  "recipients": [
+    {
+      "kid": {
+        "x25519": "BASE64URL(kid-ecc-recv)"
+      },
+      "encrypted_key": "BASE64URL(wrap(CEK))"
+    }
+  ],
+  "iv": "BASE64URL(GCM_IV_12bytes)",
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+jws",
+      "alg": "EdDSA",
+      "kid": "BASE64URL(kid-ed25519-sender)",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+    },
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
+    },
+    "signature": "BASE64URL(ed25519_sig_64bytes)"
+  },
+  "tag": "BASE64URL(GCM_tag_16bytes)"
+}
+```
+
+### 2. 公开模式 + Hybrid（X25519Kyber768）
+
+```json
+{
+  "protected": {
+    "typ": "wind+jwe",
+    "cty": "wind+jws",
+    "ver": "1.0",
+    "wind_mode": "public",
+    "enc": "A256GCM",
+    "key_alg": "X25519Kyber768",
+    "kid": {
+      "x25519": "BASE64URL(kid-ecc-sender)"
+    }
+  },
+  "aad": "BASE64URL(JCS(recipients))",
+  "recipients": [
+    {
+      "kid": {
+        "x25519": "BASE64URL(kid-ecc-recv)",
+        "mlkem768": "BASE64URL(kid-pq-recv)"
+      },
+      "ek": "BASE64URL(mlkem_ct_1088bytes)",
+      "encrypted_key": "BASE64URL(wrap(CEK))"
+    }
+  ],
+  "iv": "BASE64URL(GCM_IV_12bytes)",
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+jws",
+      "alg": "EdDSA",
+      "kid": "BASE64URL(kid-ed25519-sender)",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+    },
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
+    },
+    "signature": "BASE64URL(ed25519_sig_64bytes)"
+  },
+  "tag": "BASE64URL(GCM_tag_16bytes)"
+}
+```
+
+### 3. 混淆模式 + ECC-only（X25519）
+
+```json
+{
+  "protected": {
+    "typ": "wind+jwe",
+    "cty": "wind+jws",
+    "ver": "1.0",
+    "wind_mode": "obfuscation",
+    "enc": "A256GCM",
+    "key_alg": "X25519",
+    "epk": {
+      "kty": "OKP",
+      "crv": "X25519",
+      "x": "BASE64URL(epk_x25519_sender_eph)"
+    }
+  },
+  "aad": "BASE64URL(JCS(recipients))",
+  "recipients": [
+    {
+      "rid": "BASE64URL(rid_ecc_16bytes)",
+      "encrypted_key": "BASE64URL(wrap(CEK))"
+    }
+  ],
+  "iv": "BASE64URL(GCM_IV_12bytes)",
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+jws",
+      "alg": "EdDSA",
+      "kid": "BASE64URL(kid-ed25519-sender)",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+    },
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
+    },
+    "signature": "BASE64URL(ed25519_sig_64bytes)"
+  },
+  "tag": "BASE64URL(GCM_tag_16bytes)"
+}
+```
+
+### 4. 混淆模式 + Hybrid（X25519Kyber768）
+
+```json
+{
+  "protected": {
+    "typ": "wind+jwe",
+    "cty": "wind+jws",
+    "ver": "1.0",
+    "wind_mode": "obfuscation",
+    "enc": "A256GCM",
+    "key_alg": "X25519Kyber768",
+    "epk": {
+      "kty": "OKP",
+      "crv": "X25519",
+      "x": "BASE64URL(epk_x25519_sender_eph)"
+    }
+  },
+  "aad": "BASE64URL(JCS(recipients))",
+  "recipients": [
+    {
+      "rid": "BASE64URL(rid_hybrid_16bytes)",
+      "ek": "BASE64URL(mlkem_ct_1088bytes)",
+      "encrypted_key": "BASE64URL(wrap(CEK))"
+    }
+  ],
+  "iv": "BASE64URL(GCM_IV_12bytes)",
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+jws",
+      "alg": "EdDSA",
+      "kid": "BASE64URL(kid-ed25519-sender)",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+    },
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
+    },
+    "signature": "BASE64URL(ed25519_sig_64bytes)"
+  },
+  "tag": "BASE64URL(GCM_tag_16bytes)"
+}
+```
+
+### 5. 不签名时的改动
+
+```json
+"protected": {
+  "cty": "wind+inner"
+}
+
+"ciphertext": {
+  "protected": {
+    "typ": "wind+inner",
+    "ts": 1731800000,
+    "wind_id": "<uuid_v4>",
+    "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+    "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+  },
+  "payload": {
+    "meta": {
+      "content_type": "text/plain; charset=utf-8",
+      "original_size": 3210
+    },
+    "body": {
+      "data": "BASE64URL(payload_bytes)"
+    }
+  }
+}
+```
