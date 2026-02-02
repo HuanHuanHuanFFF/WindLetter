@@ -116,26 +116,30 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
 外层（outer.protected）补丁：
 ```json
 {
-  "cty": "wind+inner"
+  "protected": {
+    "cty": "wind+inner"
+  }
 }
 ```
 内层（ciphertext）结构：
 ```json
 {
-  "protected": {
-    "typ": "wind+inner",
-    "ts": 1731800000,
-    "wind_id": "<uuid_v4>",
-    "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
-    "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
-  },
-  "payload": {
-    "meta": {
-      "content_type": "text/plain; charset=utf-8",
-      "original_size": 3210
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+inner",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
     },
-    "body": {
-      "data": "BASE64URL(payload_bytes)"
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
     }
   }
 }
@@ -828,27 +832,31 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 ### 5. 不签名时的改动
 
 ```json
-"protected": {
-  "cty": "wind+inner"
+{
+  "protected": {
+    "cty": "wind+inner"
+  }
 }
 ```
 
 ```json
-"ciphertext": {
-  "protected": {
-    "typ": "wind+inner",
-    "ts": 1731800000,
-    "wind_id": "<uuid_v4>",
-    "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
-    "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
-  },
-  "payload": {
-    "meta": {
-      "content_type": "text/plain; charset=utf-8",
-      "original_size": 3210
+{
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+inner",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
     },
-    "body": {
-      "data": "BASE64URL(payload_bytes)"
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
     }
   }
 }
