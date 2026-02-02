@@ -57,7 +57,7 @@
 
 v1.0 仅允许以下算法与组合（其余一律拒绝）。
 
-### 1) 密文加密套件（可选其一）
+### 1) 密文加密（可选其一）
 
 - **ECC-only**
   - `key_alg = "X25519"`
@@ -69,11 +69,13 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
 
 ### 2) 签名（可选）
 
-- `inner_jws.protected.alg = "EdDSA"`（Ed25519）
+- `ciphertext.protected.alg = "EdDSA"`（Ed25519；仅签名模式）
+- `ciphertext.protected.kid` 存在（仅签名模式）
+- `ciphertext.signature` 存在（仅签名模式）
 
 ### 3) 固定依赖（不可选）
 
-- **KDF**：HKDF-SHA256（从共享秘密派生 `session_key / KEK / CEK` 等密钥材料）
+- **KDF**：HKDF-SHA256（从共享秘密派生 `KEK / rid` 等密钥材料）
 - **Hash**：SHA-256（计算绑定哈希/指纹：`jwe_protected_hash / jwe_recipients_hash` 等）
 - **JSON 规范化**：JCS（RFC 8785，用于对 JSON 做一致序列化，保证哈希输入可复现）
 - **Key Wrap**：A256KW（AES Key Wrap，用 `KEK` 包装/解包 `CEK`，写入 `encrypted_key`）
@@ -117,7 +119,6 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
   "cty": "wind+inner"
 }
 ```
-
 内层（ciphertext）结构：
 ```json
 {
@@ -229,7 +230,7 @@ $$
 
 ### 简述:
 
-* **外层 AES-GCM 认证范围**：`ciphertext`、`tag` 与 **AAD**（JWE 规定的 `ASCII(base64url(protected) + "." + aad)`），并且 *
+* **外层 AES-GCM 认证范围**：`ciphertext`、`tag` 与 **AAD**（JWE 规定的 `ASCII(base64url(protected) + "." + aad)`），并且
   *标签计算依赖 `iv`**。因此 `protected_b64`、`aad`、`iv`、`ciphertext` 任一比特被改，**GCM 验证失败**（除去随标签长度而来的可忽略伪造概率）。
 
 * **内层认证范围（Signed 时）**：`ciphertext.protected` 与 `ciphertext.payload`（以及对应的 `signature` 校验）。这两者任何一处改 1
@@ -286,8 +287,8 @@ $$
 
 3. **常量时间比较 (Constant-Time Compare)**：
     - 使用常量时间比较分别比对：
-        - `inner.jwe_protected_hash` vs `exp_jwe_protected_hash`
-        - `inner.jwe_recipients_hash` vs `exp_jwe_recipients_hash`
+        - `ciphertext.protected.jwe_protected_hash` vs `exp_jwe_protected_hash`
+		- `ciphertext.protected.jwe_recipients_hash` vs `exp_jwe_recipients_hash`
     - 任一不匹配则 **拒绝**（外壳与内芯不再绑定，疑似被替换）。
 
 ### 3. 来源认证与签名校验 (Signature Verification)
@@ -407,11 +408,12 @@ $$
    * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
 6. **生成 AAD**：
    * 规范化 `recipients`：`JCS(recipients)`。
-   * `AAD = Base64URL(JCS(recipients))`。
+   * `outer.aad = Base64URL(JCS(recipients))`。
+   * `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
 7. **加密 Payload**：
    * 使用 CEK 加密内层数据：
      $$
-     \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{inner}\_\text{bytes})
+     \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{pt}=\text{inner}\_\text{bytes})
      $$
 
 #### 2. 解密流程 (接收方)
@@ -428,9 +430,10 @@ $$
    
    * 解开 `encrypted_key` 得到会话密钥：$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$。
 5. **解密 Payload**：
+   * 重建 `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
    * 使用 CEK 解密外层密文得到内层数据：
      $$
-     \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+     \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
      $$
 
 ---
@@ -462,10 +465,12 @@ $$
 6. **加密 CEK**：
    
    * $C_{key}=\text{AES-KeyWrap}(KEK,CEK)$，写入 `recipients[i].encrypted_key`。
-7. **生成 AAD**：`AAD = Base64URL(JCS(recipients))`。
+7. **生成 AAD**：
+   * `outer.aad = Base64URL(JCS(recipients))`。
+   * `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
 8. **加密 Payload**：
    $$
-   (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{pt}=\text{inner}\_\text{bytes})
+   (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{pt}=\text{inner}\_\text{bytes})
    $$
 
 #### 2. 解密流程 (接收方)
@@ -480,8 +485,9 @@ $$
 4. **派生 KEK → 解密 CEK（按算法差异）**：按算法差异组装 $Z$ 与 `info`，得到 KEK，然后：
    $$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$$
 5. **解密 Payload**：
+   * 重建 `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
    $$
-   \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=AAD,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+   \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
    $$
 
 ## 混淆模式下计算 rid
@@ -603,7 +609,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
         "x25519": "BASE64URL(kid-ecc-recv)",
         "mlkem768": "BASE64URL(kid-pq-recv)"
       },
-      "ek": "BASE64URL(mlkem_ct_for_this_recipient)",
+      "ek": "BASE64URL(mlkem_ct_1088bytes)",
       "encrypted_key": "BASE64URL(wrap(CEK))"
     }
   ],
@@ -825,7 +831,9 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 "protected": {
   "cty": "wind+inner"
 }
+```
 
+```json
 "ciphertext": {
   "protected": {
     "typ": "wind+inner",
