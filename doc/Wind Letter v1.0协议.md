@@ -1,11 +1,60 @@
 # Wind Letter v1.0协议
 
-## 0. 总览 (协议传输JSON) 
+## 0. 协议传输JSON视图
+
+>此处仅展示一种情况的全部展开视图，其他情况见附录。
+
+```json
+{
+  "protected": {
+    "typ": "wind+jwe",
+    "cty": "wind+jws",
+    "ver": "1.0",
+    "wind_mode": "public",
+    "enc": "A256GCM",
+    "key_alg": "X25519",
+    "kid": {
+      "x25519": "BASE64URL(kid-ecc-sender)"
+    }
+  },
+  "aad": "BASE64URL(JCS(recipients))",
+  "recipients": [
+    {
+      "kid": {
+        "x25519": "BASE64URL(kid-ecc-recv)"
+      },
+      "encrypted_key": "BASE64URL(wrap(CEK))"
+    }
+  ],
+  "iv": "BASE64URL(GCM_IV_12bytes)",
+  "ciphertext": {
+    "protected": {
+      "typ": "wind+jws",
+      "alg": "EdDSA",
+      "kid": "BASE64URL(kid-ed25519-sender)",
+      "ts": 1731800000,
+      "wind_id": "<uuid_v4>",
+      "jwe_protected_hash": "BASE64URL(SHA256(JCS(outer.protected_json)))",
+      "jwe_recipients_hash": "BASE64URL(SHA256(JCS(outer.recipients_json)))"
+    },
+    "payload": {
+      "meta": {
+        "content_type": "text/plain; charset=utf-8",
+        "original_size": 3210
+      },
+      "body": {
+        "data": "BASE64URL(payload_bytes)"
+      }
+    },
+    "signature": "BASE64URL(ed25519_sig_64bytes)"
+  },
+  "tag": "BASE64URL(GCM_tag_16bytes)"
+}
+```
 
 **见附录**
-
-## 字段设计
-### 认证与绑定
+## 1. 字段设计
+### 1.1 认证与绑定
 > 通过这些机制，可以做到传输过程中 1 bit 不改，避免换壳攻击（外层字段被 GCM + 内层 hash 双重约束）。
 - `protected`：外层保护头（算法/模式等元信息）；被 GCM 认证；内层用 `jwe_protected_hash` 绑定它。
 - `recipients`：收件人入口列表；其 JCS 用于算 `aad`；内层用 `jwe_recipients_hash` 绑定它。
@@ -15,39 +64,43 @@
 - `tag`：AES-GCM 认证标签（16 bytes）。
 - `jwe_protected_hash / jwe_recipients_hash`：内层签名内的“外壳指纹”，防换壳/转投。
 
-### 外层 `protected` 内字段
+### 1.2 外层 `protected` 内字段
 - `ver`：协议版本。
 - `typ/cty`：协议标签与内容类型提示（工程路由用）。
 - `wind_mode`：传输模式（public / obfuscation）。
 - `enc`：AEAD 算法（白名单校验）。
 - `key_alg`：密钥封装组合（ECC-only / Hybrid）。
 
-### 公开模式（public）
+### 1.3 模式差异
+> 具体差异见
+####  A. 公开模式（public）
 - `protected.kid.x25519`：发送方 X25519 公钥 kid（暴露发件人）。
 - `recipients[i].kid.x25519`：接收方 X25519 公钥 kid（暴露收件人）。
 - `recipients[i].kid.mlkem768`：接收方 ML-KEM-768 公钥 kid（暴露收件人）。
 - `recipients[i].ek`：ML-KEM 封装密文（每消息/每收件人一份）。
 - `recipients[i].encrypted_key`：用 `KEK` 包装的 `CEK`（unwrap 得到 CEK）。
 
-### 混淆模式（obfuscation）
+#### B. 混淆模式（obfuscation）
 - `protected.epk.kty/crv/x`：发送方临时 X25519 公钥（参与共享秘密与派生）。
 - `recipients[i].rid`：收件人指纹（对外匿名，用于快速匹配 entry）。
 - `recipients[i].ek`：ML-KEM 封装密文（收件人解封装得到 PQ 共享秘密）。
 - `recipients[i].encrypted_key`：用 `KEK` 包装的 `CEK`。
 
-### 内层（解密后得到）
+### 1.4 内层（解密后得到）
 - `ciphertext.protected.ts`：时间戳，展示给用户（也可用于防重放）。
 - `ciphertext.protected.wind_id`：消息 ID（上层可用于去重/反重放）。
 - `ciphertext.protected.alg/kid`：签名算法/公钥标识（启用签名时才有）；`ciphertext.signature`：签名值（启用签名时才有）。
 
-### payload
+### 1.6 payload
 - `payload.meta.content_type`：MIME（如何解释 data）。
 - `payload.meta.original_size`：原始字节长度。
 - `payload.body.data`：原始 bytes 的 Base64URL（无填充）。
 
 
-## 协议流程
-### 1.  算法选择
+## 2. 协议流程
+### 2.1  选择算法、模式
+选择算法，可选 ECC-only (X25519) 和 Hybrid (X25519Kyber768) 
+选择传输模式，可选 public 和 obfuscation
 ### 2. 是否签名
 ### 3. 加密
 ### 4. 传输 接收
@@ -342,7 +395,7 @@ $$
 - **IV 生成**：`Random(12 bytes, 96-bit)`
 - **说明**：不使用派生 IV（每条消息随机、独立）
 
-## 加密解密流程
+## 加密解密流程、模式差异
 > 本节抽取 ECC-only 与 Hybrid 的公共步骤。算法差异仅体现在：
 > 1) 是否存在 $SS_{PQ}$ 与 `recipients[i].ek`
 > 2) $Z$ 的拼接方式
@@ -624,9 +677,8 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 ```
 ### JSON内部全部展视图
 
-> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。
->
-> ### 1. 公开模式 +  ECC-only（X25519）
+> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。 
+### 1. 公开模式 +  ECC-only（X25519）
 
 ```json
 {
