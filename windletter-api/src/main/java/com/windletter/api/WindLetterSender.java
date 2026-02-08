@@ -80,6 +80,9 @@ public class WindLetterSender {
         protectedB64 = com.windletter.core.encoding.Base64Url.encode(protectedB64.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         List<Recipient> recipientEntries = recipients.stream().map(r -> buildRecipient(r, cek)).collect(Collectors.toList());
+        if (!jweService.validateRecipientAlgorithms(recipientEntries)) {
+            throw new IllegalArgumentException("Unsupported or invalid recipient algorithm combination");
+        }
 
         String aadB64 = jweService.computeAadBase64(recipientEntries);
         byte[] aadBytes = jweService.buildAadBytes(protectedB64, aadB64);
@@ -88,7 +91,7 @@ public class WindLetterSender {
 
         byte[] jwsBytes = JsonUtil.toJson(innerJws).getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
-        byte[] iv = hash.hkdfSha256(cek, new byte[32], com.windletter.core.WindConstants.WIND_ID_INFO.getBytes(java.nio.charset.StandardCharsets.US_ASCII), com.windletter.core.WindConstants.IV_SIZE_BYTES);
+        byte[] iv = WindRandom.randomBytes(com.windletter.core.WindConstants.IV_SIZE_BYTES);
         AeadResult enc = aeadCipher.encrypt(cek, iv, aadBytes, jwsBytes);
 
         WindJwe jwe = new WindJwe(protectedB64, aadB64, recipientEntries,

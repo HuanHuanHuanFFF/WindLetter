@@ -9,6 +9,7 @@ import com.windletter.crypto.kem.MlKem768;
 import com.windletter.crypto.kem.X25519KeyAgreement;
 import com.windletter.crypto.sign.Ed25519Signer;
 import com.windletter.protocol.jwe.Recipient;
+import com.windletter.protocol.jwe.JweProtectedHeader;
 import com.windletter.protocol.jwe.WindJwe;
 import com.windletter.protocol.jws.JwsProtectedHeader;
 import com.windletter.protocol.jws.WindJws;
@@ -51,8 +52,15 @@ public class WindLetterReceiver {
             throw new IllegalArgumentException("input is null");
         }
         WindJwe jwe = parseJweOrArmor(jweOrArmorText);
-        if (!jweService.validateEnc(WindAlgorithms.ENC_A256GCM)) {
+        JweProtectedHeader jweProtectedHeader = JsonUtil.fromJson(
+                new String(Base64Url.decode(jwe.getProtectedB64()), StandardCharsets.UTF_8),
+                JweProtectedHeader.class
+        );
+        if (!jweService.validateEnc(jweProtectedHeader.getEnc())) {
             throw new IllegalArgumentException("Unsupported enc");
+        }
+        if (!jweService.validateRecipientAlgorithms(jwe.getRecipients())) {
+            throw new IllegalArgumentException("Unsupported or invalid recipient algorithm combination");
         }
         String aadExpected = jweService.computeAadBase64(jwe.getRecipients());
         if (!aadExpected.equals(jwe.getAad())) {
@@ -103,6 +111,9 @@ public class WindLetterReceiver {
                 if (keyPair == null) {
                     continue;
                 }
+                if (r.getHeader().getEpk() == null || r.getHeader().getEpk().getX() == null) {
+                    continue;
+                }
                 byte[] epkPub = Base64Url.decode(r.getHeader().getEpk().getX());
                 X25519KeyAgreement agree = new X25519KeyAgreement();
                 byte[] shared = agree.deriveSharedSecret(keyPair.getPrivateKey(), epkPub);
@@ -113,7 +124,7 @@ public class WindLetterReceiver {
                 try {
                     return unwrap.unwrap(wrapped, 0, wrapped.length);
                 } catch (InvalidCipherTextException e) {
-                    throw new IllegalArgumentException("Failed to unwrap CEK", e);
+                    continue;
                 }
             } else if (WindAlgorithms.ALG_ML_KEM_768.equals(r.getHeader().getAlg()) && r.getHeader().getKid() != null) {
                 var keyPair = keyStore.findPqcKeyByKid(r.getHeader().getKid());
@@ -121,8 +132,10 @@ public class WindLetterReceiver {
                     continue;
                 }
                 byte[] combined = Base64Url.decode(r.getEncryptedKey());
-                // Assume encapsulated || wrappedCek
-                int encapsulatedLen = combined.length / 2; // heuristic; Kyber768 ciphertext size is fixed 1088 bytes
+                int encapsulatedLen = com.windletter.core.WindConstants.ML_KEM_768_CIPHERTEXT_SIZE_BYTES;
+                if (combined.length <= encapsulatedLen) {
+                    continue;
+                }
                 byte[] encap = java.util.Arrays.copyOfRange(combined, 0, encapsulatedLen);
                 byte[] wrappedCek = java.util.Arrays.copyOfRange(combined, encapsulatedLen, combined.length);
                 byte[] shared = new MlKem768().decapsulate(keyPair.getPrivateKey(), encap);
@@ -132,7 +145,7 @@ public class WindLetterReceiver {
                 try {
                     return unwrap.unwrap(wrappedCek, 0, wrappedCek.length);
                 } catch (InvalidCipherTextException e) {
-                    throw new IllegalArgumentException("Failed to unwrap CEK (PQC)", e);
+                    continue;
                 }
             }
         }
