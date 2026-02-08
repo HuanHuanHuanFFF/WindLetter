@@ -1,8 +1,28 @@
-# Wind Letter v1.0协议
+﻿# Wind Letter v1.0协议
+
+# 协议简介
+
+## 应用场景与设计目标
+
+- Wind Letter 是一种面向**消息/文件**的端到端加密封装格式：把**明文内容**加密封装成一个可在任意传输渠道投递的 JSON（如聊天软件私聊/群聊、邮件等）。
+
+## 目标
+
+- **信息安全**：保密内容、防篡改，并在混淆模式下尽量减少“发给谁/发给多少人”等关系暴露风险。
+- **设计/升级**：协议结构尽量与具体加密算法分离，未来可在不大改格式与流程的前提下，替换/升级更安全的算法组合。
+- **维护**：通过长期维护，让协议逐步达到可用于工程实践的稳定水平。
+
+## 特点
+
+- **轻量与易实现**：没有历史包袱，结构尽量简洁，字段固定清晰，便于多语言实现与互通。
+- **面向未来**：支持经典 ECC（X25519）与后量子算法 PQC（Kyber768）的混合方案，用来降低未来量子攻击带来的风险。
+- **减少关系暴露风险**：提供混淆模式，通过 `rid` 匹配与分桶填充，尽量让旁观者更难看出“发给谁/发给多少人”（不包括网络级匿名）。
+
+# 协议设计
 
 ## 0. 协议传输JSON视图
 
->此处仅展示一种情况的全部展开视图，其他情况见附录。
+> 此处仅展示一种情况的全部展开视图，其他情况见附录。
 
 ```json
 {
@@ -53,8 +73,11 @@
 ```
 
 **见附录**
+
 ## 1. 字段设计
+
 ### 1.1 认证与绑定
+
 > 通过这些机制，可以做到传输过程中 1 bit 不改，避免换壳攻击（外层字段被 GCM + 内层 hash 双重约束）。
 - `protected`：外层保护头（算法/模式等元信息）；被 GCM 认证；内层用 `jwe_protected_hash` 绑定它。
 - `recipients`：收件人入口列表；其 JCS 用于算 `aad`；内层用 `jwe_recipients_hash` 绑定它。
@@ -65,6 +88,7 @@
 - `jwe_protected_hash / jwe_recipients_hash`：内层签名内的“外壳指纹”，防换壳/转投。
 
 ### 1.2 外层 `protected` 内字段
+
 - `ver`：协议版本。
 - `typ/cty`：协议标签与内容类型提示（工程路由用）。
 - `wind_mode`：传输模式（public / obfuscation）。
@@ -72,8 +96,9 @@
 - `key_alg`：密钥封装组合（ECC-only / Hybrid）。
 
 ### 1.3 模式差异
-> 具体差异见
-####  A. 公开模式（public）
+> 公开模式与混淆模式在“标识方式 / 是否暴露关系 / epk/rid/填充策略”等方面不同；详见 §4.1（public 流程）、§4.2（obfuscation 流程）与 §6（混淆模式）。
+
+#### A. 公开模式（public）
 - `protected.kid.x25519`：发送方 X25519 公钥 kid（暴露发件人）。
 - `recipients[i].kid.x25519`：接收方 X25519 公钥 kid（暴露收件人）。
 - `recipients[i].kid.mlkem768`：接收方 ML-KEM-768 公钥 kid（暴露收件人）。
@@ -91,75 +116,42 @@
 - `ciphertext.protected.wind_id`：消息 ID（上层可用于去重/反重放）。
 - `ciphertext.protected.alg/kid`：签名算法/公钥标识（启用签名时才有）；`ciphertext.signature`：签名值（启用签名时才有）。
 
-### 1.6 payload
+### 1.5 payload
 - `payload.meta.content_type`：MIME（如何解释 data）。
 - `payload.meta.original_size`：原始字节长度。
 - `payload.body.data`：原始 bytes 的 Base64URL（无填充）。
 
-
 ## 2. 协议流程
-### 2.1  选择算法、模式
-选择算法，可选 ECC-only (X25519) 和 Hybrid (X25519Kyber768) 
-选择传输模式，可选 public 和 obfuscation
-### 2. 是否签名
-### 3. 加密
-### 4. 传输 接收
-### 5. 验证 解密
+### 2.1 选择算法、模式、签名（主干）
 
-## 算法白名单（v1.0）
+- 选择 `wind_mode`（public / obfuscation），并确定接收者标识方式（`kid` / `rid`）。见 §1.3  
+- 选择算法组合：`key_alg` 与 `enc` 必须来自白名单。见 §4.0, §7.2  
+- 决定是否签名：签名走 `wind+jws`；不签名走 `wind+inner`。见 §3.0（以及“不签名改动”见 附录 §7）
 
-v1.0 仅允许以下算法与组合（其余一律拒绝）。
+### 2.2 加密（发送方主干）
 
-### 1) 密文加密（可选其一）
+- 构建内层 `inner`（含 `ts / wind_id / payload`；签名与否按上一步）。见 §1.4, §1.5, §3.0  
+- 对每个真实接收者生成密钥封装材料（计算共享秘密/派生 `KEK`/wrap `CEK`；Hybrid 还包含 `ek`）。见 §4.1「1.加密流程」/ §4.2「1.加密流程」与 §4.0(B)  
+- 若为混淆模式：对 `recipients` 做分桶填充诱饵。见 §6.2  
+- 计算 `aad` 并执行 AES-GCM 加密得到 `ciphertext/tag`，组装 outer JSON。见 §1.1, §4.1「1.加密流程」/ §4.2「1.加密流程」与 §0
 
-- **ECC-only**
-  - `key_alg = "X25519"`
-  - `enc = "A256GCM"`
+### 2.3 传输 / 接收（投递层）
 
-- **Hybrid（ECC+PQC）**
-  - `key_alg = "X25519Kyber768"`（X25519 + ML-KEM-768）
-  - `enc = "A256GCM"`
+- 只传输 outer JSON；网络层匿名与否不在本协议保证范围。见 §0, §9
 
-### 2) 签名（可选）
+### 2.4 验证 / 解密（接收方主干）
 
-- `ciphertext.protected.alg = "EdDSA"`（Ed25519；仅签名模式）
-- `ciphertext.protected.kid` 存在（仅签名模式）
-- `ciphertext.signature` 存在（仅签名模式）
+- 外层完整性校验：复算并比对 `aad` 等。见 §5.1  
+- 定位“属于我”的接收者条目：public 用 `kid`；obfuscation 通过 `rid` 匹配。见 §1.3, §6.1  
+- 解封装恢复 `CEK`，再用 AES-GCM 解密得到 `inner`。见 §4.1「2.解密流程」/ §4.2「2.解密流程」  
+- 内外层绑定校验（防换壳）。见 §5.2  
+- 若为签名模式：验签；不签名则跳过。见 §5.3（签名生成见 §3.4）
 
-### 3) 固定依赖（不可选）
+> 错误处理统一口径见 §8（NotForMe / InvalidMessage 等）。
 
-- **KDF**：HKDF-SHA256（从共享秘密派生 `KEK / rid` 等密钥材料）
-- **Hash**：SHA-256（计算绑定哈希/指纹：`jwe_protected_hash / jwe_recipients_hash` 等）
-- **JSON 规范化**：JCS（RFC 8785，用于对 JSON 做一致序列化，保证哈希输入可复现）
-- **Key Wrap**：A256KW（AES Key Wrap，用 `KEK` 包装/解包 `CEK`，写入 `encrypted_key`）
-- **编码**：Base64URL（无填充，用于字段传输编码：`iv / tag / ciphertext / signature` 等）
-- **标识**：UUID v4（`wind_id`，用于消息标识/去重/追踪）
+## 3. 签名流程
 
-## 长度规范
-
-| 项目                  | 长度          | 依据 / 备注                                                                                                                 |
-|:--------------------|:------------|:------------------------------------------------------------------------------------------------------------------------|
-| **CEK (A256GCM)**   | **32 B**    | NIST SP 800-38D; [[RFC 7518 §5.3](https://www.rfc-editor.org/rfc/rfc7518)]                                              |
-| **GCM IV (Nonce)**  | **12 B**    | 推荐 96-bit 以获得最高效率与安全。[[NIST SP 800-38D](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf)] |
-| **GCM Tag**         | **16 B**    | 规定 128-bit 认证标签。[[RFC 7518](https://www.rfc-editor.org/rfc/rfc7518)]                                                    |
-| **HKDF 哈希**         | **SHA-256** | HashLen=32 for SHA-256。[[RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)]                                             |
-| **KEK**             | **32 B**    | 匹配 A256KW 要求的 256-bit 密钥输入。[[RFC 3394](https://www.rfc-editor.org/rfc/rfc3394)]                                         |
-| **rid**             | **16 B**    | 协议自定义 (128-bit 截断哈希)                                                                                                    |
-| **wind_id**         | **16 B**    | UUID v4 (128-bit)。[[RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)]                                                  |
-| **ts**              | **64-bit**  | 实现约定 (Unix Timestamp)                                                                                                   |
-| **X25519 公钥**       | **32 B**    | 输入点格式为 32 字节。[[RFC 7748 §5](https://www.rfc-editor.org/rfc/rfc7748)]                                                    |
-| **X25519 共享密钥**     | **32 B**    | 输出共享秘密为 32 字节。[[RFC 7748 §5](https://www.rfc-editor.org/rfc/rfc7748)]                                                   |
-| **ML-KEM-768 共享密钥** | **32 B**    | FIPS 203 (Final) Algorithm 13。[[FIPS 203](https://csrc.nist.gov/pubs/fips/203/ipd)]                                     |
-| **ML-KEM-768 密文**   | **1088 B**  | FIPS 203 (Final) Table 2。[[FIPS 203](https://csrc.nist.gov/pubs/fips/203/ipd)]                                          |
-| **Ed25519 签名**      | **64 B**    | Ed25519 签名固定长度。[[RFC 8032 §5.1.6](https://www.rfc-editor.org/rfc/rfc8032)]                                              |
-| **kid (指纹)**        | **32 B**    | JWK Thumbprint SHA-256。[[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638)]                                             |
-| **JCS**             | **变长**      | JSON Canonicalization Scheme (用于 AAD/Hash 计算)。[[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)]                      |
-
-> 总规则：本表中长度均指“原始字节”；传输字段统一 Base64URL（无填充），除非特别声明为 UUID 文本。
-
-## 签名流程 (Signature Process)
-
-### 0. 可选是否签名
+### 3.0 可选是否签名
 
 若选择不签名，则需要改动部分结构，改动如下；验证时无需验签，但依然能保证传输过程中一字不改。
 
@@ -198,18 +190,17 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
 }
 ```
 
+以下各小节（3.1~3.5）仅适用于**签名模式**（`cty="wind+jws"`）；未签名模式无需构建/验签 `ciphertext.signature`。
 
-以下各小节（1~3）仅适用于**签名模式**（`cty="wind+jws"`）；未签名模式无需构建/验签 `ciphertext.signature`。
-
-### 1. 准备绑定数据 (Binding Preparation)
+### 3.1 准备绑定数据 (Binding Preparation)
 
 为了防止“换壳攻击”，内层 JWS 必须与外层 JWE 的关键元数据（保护头与收件人列表）进行密码学绑定。在构建内层 Header
 之前，发送方必须先确定外层的 `protected` 和 `recipients` 结构。
 
 1. **解码外层保护头 (protected) 为 JSON 对象**：
-   
+
 - `protected_json = JSON.parse(Base64URL_Decode(outer.protected))`
-  
+
 2. **计算外层保护头哈希**：
    $$
    \text{hash}\_\text{protected}=\text{SHA256}\big(\text{JCS}(\text{protected}\_\text{json})\big)
@@ -220,7 +211,7 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
    \text{hash}\_\text{recipients}=\text{SHA256}\big(\text{JCS}(\text{outer.recipients})\big)
    $$
 
-### 2. 构建内层头部 (Header Construction)
+### 3.2 构建内层头部 (Header Construction)
 
 构建 JWS Protected Header JSON 对象。该对象必须包含必要的算法标识、时间戳、唯一 ID 以及上一步计算的哈希绑定。
 
@@ -239,7 +230,7 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
 
 * **注意**：字段需按字母序排序以符合 JCS 规范建议（尽管最终传输使用 Base64URL）。
 
-### 3. 序列化输入 (Input Serialization)
+### 3.3 序列化输入 (Input Serialization)
 
 将头部和负载转换为 JWS 签名所需的输入格式。
 
@@ -258,7 +249,7 @@ v1.0 仅允许以下算法与组合（其余一律拒绝）。
    \text{SigInput} = \text{header}\_\text{b64} + "." + \text{payload}\_\text{b64}
    $$
 
-### 4. 计算数字签名 (Calculating Signature)
+### 3.4 计算数字签名 (Calculating Signature)
 
 使用发送方的长期身份私钥对输入串进行签名。
 
@@ -269,7 +260,7 @@ $$
 \text{signature} = \text{Ed25519}\_\text{Sign}(\text{sk}\_\text{sign}, \text{SigInput})
 $$
 
-### 5. 组装内层对象 (Assembly)
+### 3.5 组装内层对象 (Assembly)
 
 最终生成的 JWS 对象（即外层加密的 `plaintext` 输入）。
 
@@ -283,22 +274,176 @@ $$
 }
 ```
 
-## 验证消息:
+## 4. 加密解密流程
 
-### 简述:
+> 本节抽取 ECC-only 与 Hybrid 的公共步骤。算法差异仅体现在：
+> 1) 是否存在 $SS_{PQ}$ 与 `recipients[i].ek`
+> 2) $Z$ 的拼接方式
+> 3) HKDF 的 `info` 以及 `rid` 的 `info`
+
+---
+
+### 4.0 算法差异
+> 字段不同可见 **附录** 里的 **JSON示例**
+
+#### A) 纯 ECC：X25519 (ECC-only)
+- `key_alg="X25519"`
+- PQC：**不使用** ML-KEM
+  - $SS_{PQ}$ / $ct$ **不存在**
+  - `recipients[i].ek` **必须省略**
+- 组合：$Z = SS_{ECC}$
+- KEK-HKDF：`salt="wind"`；`info="WindLetter v1 KEK | X25519"`；`L=32`
+- rid-HKDF：`salt="wind"`；`info="rid/ecc"`；`L=16`，输入 $IKM_{rid}=SS_{ECC}$
+
+#### B) 混合算法：X25519Kyber768 (Hybrid Combiner)
+- `key_alg="X25519Kyber768"`
+- PQC：**必须使用** ML-KEM
+  - $(SS_{PQ}, ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$
+    `ML-KEM.Encap` 为随机化算法，同一 `pk` 下 `ct` 也不一样
+  - `recipients[i].ek = ct` **必须存在**
+- 组合：$Z = SS_{ECC}\ ||\ SS_{PQ}$
+- KEK-HKDF：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`L=32`
+- rid-HKDF：`salt="wind"`；`info="rid/hybrid"`；`L=16`，输入 $IKM_{rid}=SS_{ECC}\ ||\ SS_{PQ}$
+
+#### C) 内层类型差异：是否签名 (Inner Type)
+
+- 本项与 `key_alg` 无关，仅影响 `outer.protected.cty`、`inner_bytes` 结构与后续验证步骤。
+- **签名模式 (Signed)**
+  - `outer.protected.cty="wind+jws"`
+  - `inner_bytes` 为 **wind+jws**（JWS 对象序列化字节）
+  - `ciphertext.protected.alg="EdDSA"` **必须存在**
+  - `ciphertext.protected.kid="BASE64URL(kid-ed25519-sender)"` **必须存在**
+  - `ciphertext.signature` **必须存在**
+  - 接收方：外层解密后执行 **绑定校验 + Ed25519 验签**
+- **未签名模式 (Unsigned)**
+  - `outer.protected.cty="wind+inner"`
+  - `inner_bytes` 为 **wind+inner**（未签名 inner 对象序列化字节）
+  - `ciphertext.protected.alg` **必须省略**
+  - `ciphertext.protected.kid` **必须省略**
+  - `ciphertext.signature` **必须省略**
+  - 接收方：外层解密后仅执行 **绑定校验**，跳过验签
+- 若 `cty` 不在上述枚举中，视为 **InvalidMessage**。
+
+---
+
+### 4.1 公开模式 (Public Mode) —— 通用流程
+
+#### 4.1.1 加密流程 (发送方)
+
+1. **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
+2. **ECC 计算**：使用 **发送方静态私钥** ($sk_{static}^{sender}$) 和 **接收方静态公钥** ($pk_{static}^{recv}$) 计算：
+   $$SS_{ECC}=\text{X25519}(sk_{static}^{sender},pk_{static}^{recv})$$
+3. **PQC 封装（仅 Hybrid）**：若算法为 Hybrid，执行：
+   $$(SS_{PQ},\ ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$$
+
+   * 将 $ct$ 填入 `recipients[i].ek`；若算法为 ECC-only，则本步跳过且 `recipients[i].ek` 必须省略。
+4. **混合派生 / 派生 KEK（按算法差异）**：
+
+   * 组装秘密：$Z$ 按“算法差异”取值（ECC-only：$SS_{ECC}$；Hybrid：$SS_{ECC}||SS_{PQ}$）。
+   * 派生：$KEK=\text{HKDF-Expand}(\text{HKDF-Extract}(\text{salt},Z),\text{info},L)$。
+     **参数**：`salt="wind"`；`info` 按算法差异；`L=32`。
+5. **加密 CEK**：
+   * 使用 **A256KW** 包裹 CEK：$C_{key}=\text{AES-KeyWrap}(KEK,CEK)$。
+   * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
+6. **生成 AAD**：
+   * 规范化 `recipients`：`JCS(recipients)`。
+   * `outer.aad = Base64URL(JCS(recipients))`。
+   * `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
+7. **加密 Payload**：
+   * 使用 CEK 加密内层数据：
+     $$
+     \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{pt}=\text{inner}\_\text{bytes})
+     $$
+
+#### 4.1.2 解密流程 (接收方)
+
+1. **识别与 ECC**：从 Header 获取发送方 ID（或 `kid`），查找其公钥。使用 **接收方静态私钥** ($sk_{static}^{recv}$) 计算：
+   $$SS_{ECC}=\text{X25519}(sk_{static}^{recv},pk_{static}^{sender})$$
+2. **PQC 恢复（仅 Hybrid）**：若算法为 Hybrid，从 `recipients[i].ek` 提取 $ct$ 并解封装：
+   $$SS_{PQ}=\text{ML-KEM.Decap}(sk_{static}^{recv},ct)$$
+   若算法为 ECC-only，则本步跳过。
+3. **混合派生 / 派生 KEK（按算法差异）**：
+   * 组装 $Z$（同发送方）。
+   * `salt="wind"`；`info` 按算法差异；`L=32`。
+4. **解密 CEK**：
+
+   * 解开 `encrypted_key` 得到会话密钥：$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$。
+5. **解密 Payload**：
+   * 重建 `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
+   * 使用 CEK 解密外层密文得到内层数据：
+     $$
+     \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+     $$
+
+---
+
+### 4.2 混淆模式 (Obfuscation Mode) —— 通用流程
+
+#### 4.2.1 加密流程 (发送方)
+
+1. **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
+2. **X25519 协商**：
+   * 生成临时密钥对 $(sk_{eph},pk_{eph})$。
+   * 计算共享秘密：$SS_{ECC}=\text{X25519}(sk_{eph},pk_{static}^{recv})$。
+   * 将 $pk_{eph}$ 填入 `protected.epk`。
+3. **ML-KEM 封装（仅 Hybrid）**：若算法为 Hybrid，执行：
+   $$(SS_{PQ},\ ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$$
+
+   * 将 $ct$ 填入 `recipients[i].ek`；若算法为 ECC-only，则本步跳过且 `recipients[i].ek` 必须省略。
+4. **计算路由指纹 (rid)（按算法差异）**：
+   * 输入 $IKM_{rid}$ 按算法差异取值（ECC-only：$SS_{ECC}$；Hybrid：$SS_{ECC}||SS_{PQ}$）。
+   * 计算：
+     $$
+     rid=\text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{salt="wind"},IKM_{rid}),\ \text{info},\ L=16\big)
+     $$
+     其中 `info` 按算法差异（`rid/ecc` 或 `rid/hybrid`）。
+   * 将 $rid$ 填入 `recipients[i].rid`。
+5. **混合派生 / 派生 KEK（按算法差异）**：
+   * 组装 $Z$（同上）。
+   * `salt="wind"`；`info` 按算法差异；`L=32`。
+6. **加密 CEK**：
+
+   * $C_{key}=\text{AES-KeyWrap}(KEK,CEK)$，写入 `recipients[i].encrypted_key`。
+7. **生成 AAD**：
+   * `outer.aad = Base64URL(JCS(recipients))`。
+   * `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
+8. **加密 Payload**：
+   $$
+   (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{pt}=\text{inner}\_\text{bytes})
+   $$
+
+#### 4.2.2 解密流程 (接收方)
+
+1. **X25519 恢复**：
+   * 从 `protected.epk` 提取发送方临时公钥。
+   * 计算共享秘密：$SS_{ECC}=\text{X25519}(sk_{static}^{recv},pk_{eph})$。
+2. **ML-KEM 恢复（仅 Hybrid）**：若算法为 Hybrid，从 `recipients[i].ek` 提取 $ct$ 并解封装得到 $SS_{PQ}$；若 ECC-only 跳过。
+3. **校验路由指纹 (rid Check)**：
+   * 按算法差异重算 $IKM_{rid}$ 与 `info`，得到 $rid_{check}$。
+   * 将 $rid_{check}$ 与 `recipients[i].rid` **常量时间比较**；不匹配则跳过该条目（推荐静默丢弃）。
+4. **派生 KEK → 解密 CEK（按算法差异）**：按算法差异组装 $Z$ 与 `info`，得到 KEK，然后：
+   $$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$$
+5. **解密 Payload**：
+   * 重建 `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
+   $$
+   \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
+   $$
+
+## 5. 验证流程
+
+### 5.0 验证消息（简述）
+
+#### 简述:
 
 * **外层 AES-GCM 认证范围**：`ciphertext`、`tag` 与 **AAD**（JWE 规定的 `ASCII(base64url(protected) + "." + aad)`），并且
-  *标签计算依赖 `iv`**。因此 `protected_b64`、`aad`、`iv`、`ciphertext` 任一比特被改，**GCM 验证失败**（除去随标签长度而来的可忽略伪造概率）。
+  * **标签计算依赖 `iv`**。因此 `protected_b64`、`aad`、`iv`、`ciphertext` 任一比特被改，**GCM 验证失败**（除去随标签长度而来的可忽略伪造概率）。
 
-* **内层认证范围（Signed 时）**：`ciphertext.protected` 与 `ciphertext.payload`（以及对应的 `signature` 校验）。这两者任何一处改 1
-  bit，**JWS 验签失败**。
+* **内层认证范围（Signed 时）**：`ciphertext.protected` 与 `ciphertext.payload`（以及对应的 `signature` 校验）。这两者任何一处改 1 bit，**JWS 验签失败**。
 
 * **外层字段的双重绑定**：`outer.protected` 与 `outer.recipients` 已被上一条 **GCM 的 AAD** 直接认证；你又在 JWS 头加入
   `jwe_protected_hash` / `jwe_recipients_hash` **再次绑定**（defense-in-depth）。任一处改动都会在 **GCM 或 JWS** 层被拒绝。
 
-## 验证流程 (Verification Process)
-
-### 1. 外层完整性校验 (Outer Integrity Check)
+### 5.1 外层完整性校验 (Outer Integrity Check)
 
 **目标**：保证整个 JSON 在传输过程中 1 bit 不改。
 
@@ -324,7 +469,7 @@ $$
     * **判定**：若解密抛出异常（Tag 校验失败），**拒绝**（说明密文、Tag 或 AAD 被篡改）。
     * **成功**：获得内层明文 `inner_bytes`。
 
-### 2. 内外层绑定校验 (Binding Check)
+### 5.2 内外层绑定校验 (Binding Check)
 
 **目标**：防止“换壳攻击”（攻击者将合法内层消息放入伪造外层 JWE 中）。
 
@@ -345,10 +490,10 @@ $$
 3. **常量时间比较 (Constant-Time Compare)**：
     - 使用常量时间比较分别比对：
         - `ciphertext.protected.jwe_protected_hash` vs `exp_jwe_protected_hash`
-		- `ciphertext.protected.jwe_recipients_hash` vs `exp_jwe_recipients_hash`
+    - `ciphertext.protected.jwe_recipients_hash` vs `exp_jwe_recipients_hash`
     - 任一不匹配则 **拒绝**（外壳与内芯不再绑定，疑似被替换）。
 
-### 3. 来源认证与签名校验 (Signature Verification)
+### 5.3 来源认证与签名校验 (Signature Verification)
 
 **仅当** `protected_json.cty="wind+jws"` 时执行本节；若 `cty="wind+inner"`，则跳过本节（不验签）。
 
@@ -371,183 +516,9 @@ $$
     * **判定**：
         * 若 `Valid` 为 `False`：**拒绝**（正文被篡改或私钥不匹配）。
 
-## 密钥材料与标识派生参数（HKDF-SHA-256）
+## 6. 混淆模式
 
-### 1) Hybrid Combiner → KEK
-
-- **salt**：`"wind"`
-- **info**：`"WindLetter v1 KEK | X25519Kyber768"`
-- **L**：`32`
-
----
-
-### **2) rid (混合指纹)**
-
-- **salt**: `"wind"`
-- **info**: `"rid/hybrid"`
-- **L**: `16`
-- **IKM**: $SS_{ECC}$∣∣ $SS_{PQ}$ (拼接输入)
-
----
-
-### 3) GCM IV
-
-- **IV 生成**：`Random(12 bytes, 96-bit)`
-- **说明**：不使用派生 IV（每条消息随机、独立）
-
-## 加密解密流程、模式差异
-> 本节抽取 ECC-only 与 Hybrid 的公共步骤。算法差异仅体现在：
-> 1) 是否存在 $SS_{PQ}$ 与 `recipients[i].ek`
-> 2) $Z$ 的拼接方式
-> 3) HKDF 的 `info` 以及 `rid` 的 `info`
-
----
-### 0. 算法差异
-> 字段不同可见 **0.总览** 里的 **通用JSON**
-#### A) 纯 ECC：X25519 (ECC-only)
-- `key_alg="X25519"`
-- PQC：**不使用** ML-KEM  
-  - $SS_{PQ}$ / $ct$ **不存在**
-  - `recipients[i].ek` **必须省略**
-- 组合：$Z = SS_{ECC}$
-- KEK-HKDF：`salt="wind"`；`info="WindLetter v1 KEK | X25519"`；`L=32`
-- rid-HKDF：`salt="wind"`；`info="rid/ecc"`；`L=16`，输入 $IKM_{rid}=SS_{ECC}$
-
-#### B) 混合算法：X25519Kyber768 (Hybrid Combiner)
-- `key_alg="X25519Kyber768"`
-- PQC：**必须使用** ML-KEM  
-  - $(SS_{PQ}, ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$  
-    `ML-KEM.Encap` 为随机化算法，同一 `pk` 下 `ct` 也不一样
-  - `recipients[i].ek = ct` **必须存在**
-- 组合：$Z = SS_{ECC}\ ||\ SS_{PQ}$
-- KEK-HKDF：`salt="wind"`；`info="WindLetter v1 KEK | X25519Kyber768"`；`L=32`
-- rid-HKDF：`salt="wind"`；`info="rid/hybrid"`；`L=16`，输入 $IKM_{rid}=SS_{ECC}\ ||\ SS_{PQ}$
-
-#### C) 内层类型差异：是否签名 (Inner Type)
-
-- 本项与 `key_alg` 无关，仅影响 `outer.protected.cty`、`inner_bytes` 结构与后续验证步骤。
-- **签名模式 (Signed)**  
-  - `outer.protected.cty="wind+jws"`
-  - `inner_bytes` 为 **wind+jws**（JWS 对象序列化字节）
-  - `ciphertext.protected.alg="EdDSA"` **必须存在**
-  - `ciphertext.protected.kid="BASE64URL(kid-ed25519-sender)"` **必须存在**
-  - `ciphertext.signature` **必须存在**
-  - 接收方：外层解密后执行 **绑定校验 + Ed25519 验签**
-- **未签名模式 (Unsigned)**  
-  - `outer.protected.cty="wind+inner"`
-  - `inner_bytes` 为 **wind+inner**（未签名 inner 对象序列化字节）
-  - `ciphertext.protected.alg` **必须省略**
-  - `ciphertext.protected.kid` **必须省略**
-  - `ciphertext.signature` **必须省略**
-  - 接收方：外层解密后仅执行 **绑定校验**，跳过验签
-- 若 `cty` 不在上述枚举中，视为 **InvalidMessage**。
-
----
-
-### 1. 公开模式 (Public Mode) —— 通用流程
-
-#### 1. 加密流程 (发送方)
-
-1. **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
-2. **ECC 计算**：使用 **发送方静态私钥** ($sk_{static}^{sender}$) 和 **接收方静态公钥** ($pk_{static}^{recv}$) 计算：
-   $$SS_{ECC}=\text{X25519}(sk_{static}^{sender},pk_{static}^{recv})$$
-3. **PQC 封装（仅 Hybrid）**：若算法为 Hybrid，执行：
-   $$(SS_{PQ},\ ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$$
-   
-   * 将 $ct$ 填入 `recipients[i].ek`；若算法为 ECC-only，则本步跳过且 `recipients[i].ek` 必须省略。
-4. **混合派生 / 派生 KEK（按算法差异）**：
-   
-   * 组装秘密：$Z$ 按“算法差异”取值（ECC-only：$SS_{ECC}$；Hybrid：$SS_{ECC}||SS_{PQ}$）。
-   * 派生：$KEK=\text{HKDF-Expand}(\text{HKDF-Extract}(\text{salt},Z),\text{info},L)$。  
-     **参数**：`salt="wind"`；`info` 按算法差异；`L=32`。
-5. **加密 CEK**：
-   * 使用 **A256KW** 包裹 CEK：$C_{key}=\text{AES-KeyWrap}(KEK,CEK)$。
-   * 将 $C_{key}$ 填入 `recipients[i].encrypted_key`。
-6. **生成 AAD**：
-   * 规范化 `recipients`：`JCS(recipients)`。
-   * `outer.aad = Base64URL(JCS(recipients))`。
-   * `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
-7. **加密 Payload**：
-   * 使用 CEK 加密内层数据：
-     $$
-     \big(\text{ciphertext},\ \text{tag}\big)=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{pt}=\text{inner}\_\text{bytes})
-     $$
-
-#### 2. 解密流程 (接收方)
-
-1. **识别与 ECC**：从 Header 获取发送方 ID（或 `kid`），查找其公钥。使用 **接收方静态私钥** ($sk_{static}^{recv}$) 计算：
-   $$SS_{ECC}=\text{X25519}(sk_{static}^{recv},pk_{static}^{sender})$$
-2. **PQC 恢复（仅 Hybrid）**：若算法为 Hybrid，从 `recipients[i].ek` 提取 $ct$ 并解封装：
-   $$SS_{PQ}=\text{ML-KEM.Decap}(sk_{static}^{recv},ct)$$
-   若算法为 ECC-only，则本步跳过。
-3. **混合派生 / 派生 KEK（按算法差异）**：
-   * 组装 $Z$（同发送方）。
-   * `salt="wind"`；`info` 按算法差异；`L=32`。
-4. **解密 CEK**：
-   
-   * 解开 `encrypted_key` 得到会话密钥：$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$。
-5. **解密 Payload**：
-   * 重建 `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
-   * 使用 CEK 解密外层密文得到内层数据：
-     $$
-     \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
-     $$
-
----
-
-### 2. 混淆模式 (Obfuscation Mode) —— 通用流程
-
-#### 1. 加密流程 (发送方)
-
-1. **准备密钥**：生成随机的内容加密密钥 (**CEK**, 32字节) 和初始向量 (**IV**, 12字节)。
-2. **X25519 协商**：
-   * 生成临时密钥对 $(sk_{eph},pk_{eph})$。
-   * 计算共享秘密：$SS_{ECC}=\text{X25519}(sk_{eph},pk_{static}^{recv})$。
-   * 将 $pk_{eph}$ 填入 `protected.epk`。
-3. **ML-KEM 封装（仅 Hybrid）**：若算法为 Hybrid，执行：
-   $$(SS_{PQ},\ ct)=\text{ML-KEM.Encap}(pk_{static}^{recv})$$
-   
-   * 将 $ct$ 填入 `recipients[i].ek`；若算法为 ECC-only，则本步跳过且 `recipients[i].ek` 必须省略。
-4. **计算路由指纹 (rid)（按算法差异）**：
-   * 输入 $IKM_{rid}$ 按算法差异取值（ECC-only：$SS_{ECC}$；Hybrid：$SS_{ECC}||SS_{PQ}$）。
-   * 计算：
-     $$
-     rid=\text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{salt="wind"},IKM_{rid}),\ \text{info},\ L=16\big)
-     $$
-     其中 `info` 按算法差异（`rid/ecc` 或 `rid/hybrid`）。
-   * 将 $rid$ 填入 `recipients[i].rid`。
-5. **混合派生 / 派生 KEK（按算法差异）**：
-   * 组装 $Z$（同上）。
-   * `salt="wind"`；`info` 按算法差异；`L=32`。
-6. **加密 CEK**：
-   
-   * $C_{key}=\text{AES-KeyWrap}(KEK,CEK)$，写入 `recipients[i].encrypted_key`。
-7. **生成 AAD**：
-   * `outer.aad = Base64URL(JCS(recipients))`。
-   * `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
-8. **加密 Payload**：
-   $$
-   (\text{ciphertext},\ \text{tag})=\text{AES-GCM-Encrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{pt}=\text{inner}\_\text{bytes})
-   $$
-
-#### 2. 解密流程 (接收方)
-
-1. **X25519 恢复**：
-   * 从 `protected.epk` 提取发送方临时公钥。
-   * 计算共享秘密：$SS_{ECC}=\text{X25519}(sk_{static}^{recv},pk_{eph})$。
-2. **ML-KEM 恢复（仅 Hybrid）**：若算法为 Hybrid，从 `recipients[i].ek` 提取 $ct$ 并解封装得到 $SS_{PQ}$；若 ECC-only 跳过。
-3. **校验路由指纹 (rid Check)**：
-   * 按算法差异重算 $IKM_{rid}$ 与 `info`，得到 $rid_{check}$。
-   * 将 $rid_{check}$ 与 `recipients[i].rid` **常量时间比较**；不匹配则跳过该条目（推荐静默丢弃）。
-4. **派生 KEK → 解密 CEK（按算法差异）**：按算法差异组装 $Z$ 与 `info`，得到 KEK，然后：
-   $$CEK=\text{AES-KeyUnwrap}(KEK,C_{key})$$
-5. **解密 Payload**：
-   * 重建 `gcm_aad = ASCII(outer.protected + "." + outer.aad)`。
-   $$
-   \text{inner}\_\text{bytes}=\text{AES-GCM-Decrypt}(\text{key}=CEK,\ \text{iv}=IV,\ \text{aad}=gcm\_aad,\ \text{ct}=\text{ciphertext},\ \text{tag}=\text{tag})
-   $$
-
-## 混淆模式下计算 rid
+### 6.1 rid 计算
 
 **记号与标准**
 
@@ -558,7 +529,7 @@ $$
 
 ---
 
-### 1) 混合指纹计算逻辑 (Hybrid RID)
+#### 6.1.1 混合指纹计算逻辑 (Hybrid RID)
 
 **输入准备**
 
@@ -573,7 +544,7 @@ $$
 
 $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{salt="wind"}, IKM), \text{info="rid/hybrid"}, L=16\big) \bigg)$$
 
-### 2) 写入与校验
+#### 6.1.2 写入与校验
 
 **发送方**：
 计算出唯一的 $rid$ 后，写入`recipients[i]`：
@@ -589,7 +560,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 接收方： 必须先完成 X25519 和 ML-KEM-768 的计算，得到两个共享秘密后，按上述公式重算 rid' ，并与 Header 中的字段进行
 常量时间比较 (Constant-Time Compare)。
 
-### 3) 说明与注意
+#### 6.1.3 说明与注意
 
 安全性 (AND 逻辑)：$rid$ 的生成同时依赖 ECC 和 PQC 私钥。即使 ECC 被破解，攻击者因无法解开 PQC 部分，仍无法计算出 $rid$，从而无法通过匹配 `rid` 来去匿名化接收者。
 
@@ -597,17 +568,17 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 
 输出格式：统一使用 Base64URL（无填充）。
 
-## 填充策略 (Bucket Padding Algorithm)
+### 6.2 填充策略
 
 为防止流量分析攻击者通过消息体积推断接收者数量（去匿名化），混淆模式强制执行 **固定分桶填充**。
 
-### 1. 分桶参数
+#### 6.2.1 分桶参数
 
 - **硬下限 (Limitmin)**: **8** (即使是 1 对 1 私聊，也必须伪装成 8 人群聊)。
 - **硬上限 (Limitmax)**: **32** (单条消息最多支持 32 人，超过暂不支持)。
 - **桶集合 (Buckets)**: **{8,16,32}**。
 
-### 2. 计算逻辑
+#### 6.2.2 计算逻辑
 
 设真实接收者数量为 m：
 
@@ -623,7 +594,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 
    Countdecoy=S−m
 
-### 3. 诱饵构造 (Decoy Construction)
+#### 6.2.3 诱饵构造 (Decoy Construction)
 
 为了确保不可区分性，诱饵条目必须在数据结构和字节长度上与真实条目**完全一致**。诱饵数据应由密码学安全的伪随机数生成器 (CSPRNG) 生成。
 
@@ -632,29 +603,104 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 - **ek** (仅混合模式): 随机 1088 字节 (Base64URL)。*(对应 ML-KEM-768 密文长度)*
 - *(注：在纯 ECC 模式下，不生成 `ek` 字段)*
 
-## 错误处理
+## 7. 参数与规范
 
-- 未匹配到任何 `recipients[i]`视为未找到对应密钥。
-- 校验失败 (解封装失败 / GCM tag 失败 / 绑定失败 / 验签失败) 均视为 **InvalidMessage**。
-- 对外返回统一错误，不区分失败原因。
-- 日志仅记录本地调试信息（不可回显给对端），避免泄露密钥命中/身份线索。
-## 安全边界
+### 7.1 长度规范
 
-### 1. 不提供向前安全
-- 公开模式与混淆模式均不保证向前安全。若**接收方长期解密私钥** (X25519 或 ML-KEM-768) 在未来泄露，攻击者可能对既往捕获的报文复原共享秘密并解密历史消息。
-### 2. 仅保护传输层
-- 若投递层依赖中心化聊天软件的一对一私聊，通常**无法提供**强匿名与“聊天关系隐藏”；如需更强的投递匿名性，应使用具备匿名特性的投递/网络方案 (不在此协议范围内) 。
-- 此协议主要对抗**传输链路上的被动窃听/篡改**；设备被入侵，密钥被盗等场景无法提供任何保护。
-### 3. 混淆模式仅有限保护元信息
-- 如需降低“发给谁/发给多少人”等社交关系元信息泄露风险，应选择**混淆模式**；公开模式**不提供**元信息保护能力。
-- 注意：混淆模式仍可能受到**流量分析**影响 (例如报文大小、发送频率、时间关联、网络侧关联等) 。
-### 4. 适用范围与安全经济学
-- 此协议配合良好的信息安全习惯可显著提高攻击成本，对高资源对手依然无法保证安全，在一般威胁模型下提供合理安全性。
+| 项目                  | 长度          | 依据 / 备注                                                                                                                 |
+| :------------------ | :---------- | :---------------------------------------------------------------------------------------------------------------------- |
+| **CEK (A256GCM)**   | **32 B**    | NIST SP 800-38D; [[RFC 7518 §5.3](https://www.rfc-editor.org/rfc/rfc7518#section-5.3)]                                  |
+| **GCM IV (Nonce)**  | **12 B**    | 推荐 96-bit 以获得最高效率与安全。[[NIST SP 800-38D](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf)] |
+| **GCM Tag**         | **16 B**    | 规定 128-bit 认证标签。[[RFC 7518 §5.3](https://www.rfc-editor.org/rfc/rfc7518#section-5.3)]                                   |
+| **HKDF 哈希**         | **SHA-256** | HashLen=32 for SHA-256。[[RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)]                                             |
+| **KEK**             | **32 B**    | 匹配 A256KW 要求的 256-bit 密钥输入。[[RFC 3394](https://www.rfc-editor.org/rfc/rfc3394)]                                         |
+| **rid**             | **16 B**    | 协议自定义 (128-bit 截断哈希)                                                                                                    |
+| **wind_id**         | **16 B**    | UUID v4 (128-bit)。[[RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)]                                                  |
+| **ts**              | **64-bit**  | 实现约定 (Unix Timestamp)                                                                                                   |
+| **X25519 公钥**       | **32 B**    | 输入点格式为 32 字节。[[RFC 7748 §5](https://www.rfc-editor.org/rfc/rfc7748)]                                                    |
+| **X25519 共享密钥**     | **32 B**    | 输出共享秘密为 32 字节。[[RFC 7748 §5](https://www.rfc-editor.org/rfc/rfc7748)]                                                   |
+| **ML-KEM-768 共享密钥** | **32 B**    | FIPS 203 (Final) Algorithm 13。[[FIPS 203](https://csrc.nist.gov/pubs/fips/203/ipd)]                                     |
+| **ML-KEM-768 密文**   | **1088 B**  | FIPS 203 (Final) Table 2。[[FIPS 203](https://csrc.nist.gov/pubs/fips/203/ipd)]                                          |
+| **Ed25519 签名**      | **64 B**    | Ed25519 签名固定长度。[[RFC 8032 §5.1.6](https://www.rfc-editor.org/rfc/rfc8032#section-5.1.6)]                                |
+| **kid (指纹)**        | **32 B**    | JWK Thumbprint SHA-256。[[RFC 7638 §3.4](https://www.rfc-editor.org/rfc/rfc7638#section-3.4)]                            |
+| **JCS**             | **变长**      | JSON Canonicalization Scheme (用于 AAD/Hash 计算)。[[RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)]                      |
 
+> 总规则：本表中长度均指“原始字节”；传输字段统一 Base64URL（无填充），除非特别声明为 UUID 文本。
 
-## 附录
+### 7.2 算法白名单（v1.0）
 
-### 0.传输唯一结构,通用JSON
+v1.0 仅允许以下算法与组合。
+
+#### 7.2.1 密文加密
+
+- **ECC-only**
+  - `key_alg = "X25519"`
+  - `enc = "A256GCM"`
+
+- **Hybrid（ECC+PQC）**
+  - `key_alg = "X25519Kyber768"`（X25519 + ML-KEM-768）
+  - `enc = "A256GCM"`
+
+#### 7.2.2 签名（可选）
+
+- `ciphertext.protected.alg = "EdDSA"`（Ed25519；仅签名模式）
+- `ciphertext.protected.kid` 存在（仅签名模式）
+- `ciphertext.signature` 存在（仅签名模式）
+
+#### 7.2.3 固定依赖
+
+- **KDF**：HKDF-SHA256（从共享秘密派生 `KEK / rid` 等密钥材料）
+- **Hash**：SHA-256（计算绑定哈希/指纹：`jwe_protected_hash / jwe_recipients_hash` 等）
+- **JSON 规范化**：JCS（RFC 8785，用于对 JSON 做一致序列化，保证哈希输入可复现）
+- **Key Wrap**：A256KW（AES Key Wrap，用 `KEK` 包装/解包 `CEK`，写入 `encrypted_key`）
+- **编码**：Base64URL（无填充，用于字段传输编码：`iv / tag / ciphertext / signature` 等）
+- **标识**：UUID v4（`wind_id`，用于消息标识/去重/追踪）
+
+### 7.3 密钥材料与标识派生参数
+
+#### 7.3.1 Hybrid Combiner → KEK
+
+- **salt**：`"wind"`
+- **info**：`"WindLetter v1 KEK | X25519Kyber768"`
+- **L**：`32`
+
+---
+
+#### **7.3.2 rid (混合指纹)**
+
+- **salt**: `"wind"`
+- **info**: `"rid/hybrid"`
+- **L**: `16`
+- **IKM**: $SS_{ECC}$∣∣ $SS_{PQ}$ (拼接输入)
+
+---
+
+#### 7.3.3 GCM IV
+
+- **IV 生成**：`Random(12 bytes, 96-bit)`
+- **说明**：不使用派生 IV（每条消息随机、独立）
+
+## 8. 错误处理
+
+- **NotForMe**：
+  - public：未找到与本地 `kid` 匹配的 `recipients[i]`。
+  - obfuscation：扫描所有 `recipients[i]` 后 `rid` 均未命中。
+  - 处理：推荐静默丢弃（不回显给对端）。
+
+- **InvalidMessage**：
+  - 任何校验失败：解封装失败 / AES-GCM tag 失败 / 绑定失败 /（签名模式下）验签失败。
+  - 处理：对外统一错误，不区分失败原因；日志仅本地调试，避免泄露命中线索。
+
+## 9. 安全边界
+
+- **不提供向前安全**: 公开模式与混淆模式均不保证向前安全。若**接收方长期解密私钥** (X25519 或 ML-KEM-768) 在未来泄露，攻击者可能对既往捕获的报文复原共享秘密并解密历史消息。
+- **仅保护传输层**: 若投递层依赖中心化聊天软件的一对一私聊，通常**无法提供**强匿名与“聊天关系隐藏”；如需更强的投递匿名性，应使用具备匿名特性的投递/网络方案 (不在此协议范围内) 。此协议主要对抗**传输链路上的被动窃听/篡改**；设备被入侵，密钥被盗等场景无法提供任何保护。
+- **混淆模式仅有限保护元信息**: 如需降低“发给谁/发给多少人”等社交关系元信息泄露风险，应选择**混淆模式**；公开模式**不提供**元信息保护能力。注意：混淆模式仍可能受到**流量分析**影响 (例如报文大小、发送频率、时间关联、网络侧关联等) 。
+- **适用范围与安全经济学**: 此协议配合良好的信息安全习惯可显著提高攻击成本，对高资源对手依然无法保证安全，在一般威胁模型下提供合理安全性。
+
+# 附录
+
+## 1. 传输唯一结构,通用JSON
 
 ```json
 {
@@ -675,10 +721,12 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
   "tag": "BASE64URL(GCM_tag_16bytes)"
 }
 ```
-### JSON内部全部展视图
 
-> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。 
-### 1. 公开模式 +  ECC-only（X25519）
+## 2. JSON内部全部展视图
+
+> 注：以下“JSON内部全部展视图”仅用于实现/调试：它表示把传输字段（Base64URL字符串）进行解码/解密后的内存视图展开；真实传输格式仍以上一节“传输唯一结构,通用JSON”为准。
+
+## 3. 公开模式 + ECC-only（X25519）
 
 ```json
 {
@@ -728,7 +776,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 }
 ```
 
-### 2. 公开模式 + Hybrid（X25519Kyber768）
+## 4. 公开模式 + Hybrid（X25519Kyber768）
 
 ```json
 {
@@ -780,7 +828,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 }
 ```
 
-### 3. 混淆模式 + ECC-only（X25519）
+## 5. 混淆模式 + ECC-only（X25519）
 
 ```json
 {
@@ -830,7 +878,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 }
 ```
 
-### 4. 混淆模式 + Hybrid（X25519Kyber768）
+## 6. 混淆模式 + Hybrid（X25519Kyber768）
 
 ```json
 {
@@ -881,7 +929,7 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
 }
 ```
 
-### 5. 不签名时的改动
+## 7. 不签名时的改动
 
 ```json
 {
