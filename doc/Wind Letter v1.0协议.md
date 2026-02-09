@@ -1,4 +1,4 @@
-﻿# Wind Letter v1.0协议
+# Wind Letter v1.0协议
 
 # 协议简介
 

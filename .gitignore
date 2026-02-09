@@ -1,13 +1,19 @@
 # =========================
-# Gradle / Build 输出目录
+# Build 输出目录
 # =========================
 .gradle/
+.gradle-tmp/
 build/
 **/build/
+target/
+**/target/
 out/
 **/out/
 bin/
-.gradle-tmp/
+
+# Maven 局部运行文件
+.mvn/timing.properties
+dependency-reduced-pom.xml
 
 # =========================
 # IDEA / VSCode / 工程配置
@@ -16,6 +22,8 @@ bin/
 *.iml
 .vscode/
 .run/
+.obsidian/
+doc/.obsidian/
 
 # =========================
 # 编译产物 / 临时文件
@@ -25,6 +33,14 @@ bin/
 *.tmp
 *.swp
 *.swo
+*.bak
+*.orig
+*.rej
+*.pid
+*.lock
+*.lck
+hs_err_pid*
+replay_pid*
 
 # =========================
 # 测试输出 / 报告目录
@@ -37,9 +53,11 @@ test-results/
 **/reports/
 **/jacoco/
 **/surefire-reports/
+**/failsafe-reports/
 
 # =========================
 # 系统文件
 # =========================
 .DS_Store
 Thumbs.db
+ehthumbs.db
