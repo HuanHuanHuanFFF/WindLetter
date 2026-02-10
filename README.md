@@ -25,12 +25,19 @@ WindLetter 是一个面向 `Wind Letter v1.0` 协议的 Java 库项目。
 mvn test
 ```
 
+## Current Status
+
+- Maven multi-module skeleton is in place.
+- v1.0 API contract shell is available in `windletter-api` (`record + interface`).
+- Shared error contract is available in `windletter-core`.
+- Protocol/crypto implementations are intentionally not started yet.
+
 ## Documentation
 
 - 文档索引见：`doc/README.md`
 - 当前主协议文档：`doc/Wind Letter v1.0协议.md`
 - 重构设计文档：
-  - `ARCHITECTURE_V1_REWRITE.md`
-  - `PROTOCOL_GAP_MATRIX.md`
-  - `API_CONTRACT_V1.md`
-  - `TEST_PLAN_V1.md`
+  - `doc/ARCHITECTURE_V1_REWRITE.md`
+  - `doc/PROTOCOL_GAP_MATRIX.md`
+  - `doc/API_CONTRACT_V1.md`
+  - `doc/TEST_PLAN_V1.md`

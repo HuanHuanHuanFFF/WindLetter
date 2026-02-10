@@ -1,8 +1,22 @@
 # windletter-api
 
-Application-facing facade and contracts:
+Application-facing facade and contracts (v1.0 API shell):
 
-- sender / receiver entry points
-- request / result models
-- identity and key-store interfaces
-- stable error semantics for callers
+- `com.windletter.api`
+  - `WindLetterSender`
+  - `WindLetterReceiver`
+- `com.windletter.api.enums`
+  - `WindMode`, `KeyAlgProfile`, `SigningOption`
+  - `DecryptStatus`, `VerificationStatus`, `VerificationPolicy`
+- `com.windletter.api.model`
+  - request/result DTO records
+  - identity reference records
+- `com.windletter.api.spi`
+  - `RecipientKeyStore`
+  - `IdentityService`
+  - key material records
+
+Notes:
+
+- This module currently provides contracts only.
+- No protocol/crypto implementation is included at this stage.
