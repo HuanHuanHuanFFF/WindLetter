@@ -31,6 +31,12 @@
   - `SIGNED`
   - `UNSIGNED`
 
+- `ArmorFormat`
+  - `NONE`
+  - `BASE64URL`
+  - `WIND_BASE_1024F_V1`
+  - `BINARY`
+
 - `VerificationStatus`
   - `SIGNED_VALID`
   - `UNSIGNED`
@@ -47,7 +53,9 @@
 
 - `EncryptedMessage`
   - `String wireJson`（必填）
-  - `String armor`（可选）
+  - `String armor`（文本封装时可选）
+  - `byte[] armorBytes`（二进制封装时可选）
+  - `ArmorFormat armorFormat`（默认 `NONE`）
   - 说明：仅承载稳定外部表示，不暴露内部协议实体。
 
 - `Payload`
@@ -68,6 +76,7 @@
 - `EncryptRequest`
   - `WindMode mode`
   - `KeyAlgProfile keyAlgProfile`
+  - `ArmorFormat armorFormat`（可选，默认 `NONE`）
   - `Payload payload`
   - `List<RecipientRef> recipients`
   - `Map<String, Object> customHeaders`（可选，受白名单控制）
@@ -92,7 +101,8 @@
 ### 5.2 请求对象
 
 - `DecryptRequest`
-  - `String wireJson` 或 `String armor`（至少一项）
+  - `String wireJson` / `String armor` / `byte[] armorBytes`（至少一项）
+  - `ArmorFormat armorFormat`（可选；有 armor 时可指定格式，不指定则自动识别）
   - `RecipientIdentityRef myIdentity`
   - `VerificationPolicy verificationPolicy`（可选，默认按 `cty` 自动）
 

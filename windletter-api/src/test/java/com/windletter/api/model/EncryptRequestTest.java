@@ -3,6 +3,7 @@ package com.windletter.api.model;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.windletter.api.enums.ArmorFormat;
 import com.windletter.api.enums.KeyAlgProfile;
 import com.windletter.api.enums.WindMode;
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ class EncryptRequestTest {
             () -> new EncryptRequest(
                 WindMode.PUBLIC,
                 KeyAlgProfile.X25519,
+                ArmorFormat.NONE,
                 payload,
                 List.of(),
                 Map.of()
@@ -38,6 +40,7 @@ class EncryptRequestTest {
         EncryptRequest req = new EncryptRequest(
             WindMode.PUBLIC,
             KeyAlgProfile.X25519,
+            null,
             new Payload("text/plain", new byte[] {1}, 1),
             recipients,
             headers
@@ -47,6 +50,7 @@ class EncryptRequestTest {
         headers.clear();
         assertEquals(1, req.recipients().size());
         assertEquals(1, req.customHeaders().size());
+        assertEquals(ArmorFormat.NONE, req.armorFormat());
         assertThrows(UnsupportedOperationException.class, () -> req.recipients().add(null));
         assertThrows(UnsupportedOperationException.class, () -> req.customHeaders().put("k", "v"));
     }

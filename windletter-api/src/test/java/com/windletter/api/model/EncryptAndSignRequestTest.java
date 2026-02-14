@@ -2,6 +2,7 @@ package com.windletter.api.model;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.windletter.api.enums.ArmorFormat;
 import com.windletter.api.enums.KeyAlgProfile;
 import com.windletter.api.enums.WindMode;
 import java.util.List;
@@ -17,6 +18,7 @@ class EncryptAndSignRequestTest {
             () -> new EncryptAndSignRequest(
                 WindMode.PUBLIC,
                 KeyAlgProfile.X25519,
+                ArmorFormat.BASE64URL,
                 new Payload("text/plain", new byte[] {1}, 1),
                 List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
                 Map.of(),
