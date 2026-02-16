@@ -33,7 +33,8 @@ public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
         if (ikm == null || ikm.length == 0) {
             throw new IllegalArgumentException("ikm must not be empty");
         }
-        return newHkdf().extractPRK(salt, ikm);
+        byte[] prk = newHkdf().extractPRK(salt, ikm);
+        return prk;
     }
 
     @Override
