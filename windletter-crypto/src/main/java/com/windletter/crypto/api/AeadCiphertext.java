@@ -3,10 +3,10 @@ package com.windletter.crypto.api;
 import java.util.Arrays;
 
 /**
- * Contract comment in English.
+ * AEAD encryption output container.
  *
- * @param ciphertext ciphertextbytes
- * @param tag t ag parameter.
+ * @param ciphertext ciphertext bytes
+ * @param tag authentication tag (16 bytes for GCM)
  */
 public record AeadCiphertext(byte[] ciphertext, byte[] tag) {
 

@@ -8,6 +8,9 @@ import com.windletter.crypto.api.CryptoOperationException;
 import java.security.SecureRandom;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for BouncyCastle A256GCM implementation behavior and input validation.
+ */
 class BouncyCastleA256GcmCryptoTest {
 
     private final BouncyCastleA256GcmCrypto crypto = new BouncyCastleA256GcmCrypto();

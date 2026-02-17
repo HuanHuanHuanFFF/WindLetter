@@ -13,7 +13,7 @@ import org.bouncycastle.crypto.params.KeyParameter;
 import java.util.Arrays;
 
 /**
- * Contract comment in English.
+ * Bouncy Castle-based A256GCM implementation.
  */
 public final class BouncyCastleA256GcmCrypto implements A256GcmCrypto {
 
