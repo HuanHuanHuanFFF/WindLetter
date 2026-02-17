@@ -3,7 +3,7 @@ package com.windletter.crypto.api;
 import java.util.Arrays;
 
 /**
- * 不可变 X25519 密钥对容器。
+ * Immutable X25519 key-pair container.
  */
 public record X25519KeyPair(byte[] privateKey, byte[] publicKey) {
 

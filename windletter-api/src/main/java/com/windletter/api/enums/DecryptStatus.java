@@ -1,15 +1,15 @@
 package com.windletter.api.enums;
 
 /**
- * 解密总状态。
+ * Overall decryption status.
  */
 public enum DecryptStatus {
-    /** 成功解密并产出 payload。 */
+    /** Successfully decrypted and produced payload. */
     SUCCESS,
-    /** 消息不属于当前接收方。 */
+    /** Message is not for the current receiver. */
     NOT_FOR_ME,
-    /** 消息结构或认证校验失败。 */
+    /** Message structure or authentication validation failed. */
     INVALID_MESSAGE,
-    /** 版本或算法不支持。 */
+    /** Version or algorithm is not supported. */
     UNSUPPORTED
 }

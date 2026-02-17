@@ -1,10 +1,10 @@
 package com.windletter.api.model;
 
 /**
- * 接收侧身份引用。
+ * Receiver-side identity reference.
  *
- * @param recipientId 接收方身份 ID
- * @param keySelector 可选键选择器（用于多键轮换场景）
+ * @param recipientId receiver identity ID
+ * @param keySelector optional key selector (for key rotation scenarios)
  */
 public record RecipientIdentityRef(String recipientId, String keySelector) {
 

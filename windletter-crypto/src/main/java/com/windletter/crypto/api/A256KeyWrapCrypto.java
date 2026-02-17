@@ -1,25 +1,29 @@
 package com.windletter.crypto.api;
 
 /**
- * A256KW（AES Key Wrap with 256-bit KEK）能力接口。
+ * A256KW (AES Key Wrap with 256-bit KEK) capability interface.
  */
 public interface A256KeyWrapCrypto {
 
     /**
-     * 使用 KEK 包装明文密钥。
+     * Wrap a plaintext key using KEK.
      *
-     * @param kek 32 字节 KEK
-     * @param keyToWrap 待包装密钥（长度必须是 8 的整数倍且至少 16 字节）
-     * @return 包装结果
+     * @param kek 32-byte KEK
+     * @param keyToWrap key to wrap (length must be a multiple of 8 and at least 16 bytes)
+     * @return wrapped result
+     * @throws IllegalArgumentException if key length constraints are violated
+     * @throws CryptoOperationException if wrapping fails in the underlying crypto provider
      */
     byte[] wrap(byte[] kek, byte[] keyToWrap);
 
     /**
-     * 使用 KEK 解包密钥。
+     * Unwrap a key using KEK.
      *
-     * @param kek 32 字节 KEK
-     * @param wrappedKey 包装密钥（长度必须是 8 的整数倍且至少 24 字节）
-     * @return 解包结果
+     * @param kek 32-byte KEK
+     * @param wrappedKey wrapped key (length must be a multiple of 8 and at least 24 bytes)
+     * @return unwrapped result
+     * @throws IllegalArgumentException if key length constraints are violated
+     * @throws CryptoOperationException if unwrap fails or integrity checks fail
      */
     byte[] unwrap(byte[] kek, byte[] wrappedKey);
 }

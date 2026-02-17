@@ -1,23 +1,28 @@
 package com.windletter.crypto.api;
 
 /**
- * X25519 原语能力接口。
+ * X25519 primitive capability interface.
  * <p>
- * 用于生成密钥对以及计算共享秘密。
+ * Used to generate key pairs and compute shared secrets.
  */
 public interface X25519Crypto {
 
     /**
-     * 生成 X25519 密钥对。
+     * Generate an X25519 key pair.
+     *
+     * @return immutable key pair container with 32-byte private/public key material
+     * @throws CryptoOperationException if key generation fails in the underlying crypto provider
      */
     X25519KeyPair generateKeyPair();
 
     /**
-     * 使用本地私钥与对端公钥计算 X25519 共享秘密。
+     * Compute X25519 shared secret using local private key and peer public key.
      *
-     * @param privateKey 32 字节 X25519 私钥
-     * @param peerPublicKey 32 字节 X25519 公钥
-     * @return 32 字节共享秘密
+     * @param privateKey 32-byte X25519 private key
+     * @param peerPublicKey 32-byte X25519 public key
+     * @return 32-byte shared secret
+     * @throws IllegalArgumentException if key length constraints are violated
+     * @throws CryptoOperationException if shared-secret derivation fails
      */
     byte[] deriveSharedSecret(byte[] privateKey, byte[] peerPublicKey);
 }

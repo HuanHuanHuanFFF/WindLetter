@@ -5,19 +5,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 接收侧密钥查询接口。
+ * Receiver-side key lookup interface.
  * <p>
- * findPrimary 用于快速路径；findAll 用于多键轮换或回退尝试。
+ * findPrimary is for the fast path; findAll is for key rotation or fallback attempts.
  */
 public interface RecipientKeyStore {
 
     /**
-     * 查询首选解密密钥。
+     * Look up the preferred decryption key.
      */
     Optional<DecryptionKeyMaterial> findPrimary(RecipientIdentityRef recipientIdentityRef);
 
     /**
-     * 查询候选解密密钥列表。
+     * Look up candidate decryption keys.
      */
     List<DecryptionKeyMaterial> findAll(RecipientIdentityRef recipientIdentityRef);
 }

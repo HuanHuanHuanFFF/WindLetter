@@ -1,11 +1,11 @@
 package com.windletter.api.enums;
 
 /**
- * 是否启用签名。
+ * Whether signing is enabled.
  */
 public enum SigningOption {
-    /** 启用签名。 */
+    /** Signing enabled. */
     SIGNED,
-    /** 不启用签名。 */
+    /** Signing disabled. */
     UNSIGNED
 }

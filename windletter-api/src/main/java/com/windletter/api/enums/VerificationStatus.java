@@ -1,15 +1,15 @@
 package com.windletter.api.enums;
 
 /**
- * 验签结果状态。
+ * Signature verification result status.
  */
 public enum VerificationStatus {
-    /** 已签名且验证通过。 */
+    /** Signed and verified successfully. */
     SIGNED_VALID,
-    /** 明确为不签名消息。 */
+    /** Explicitly an unsigned message. */
     UNSIGNED,
-    /** 当前流程不适用验签。 */
+    /** Signature verification is not applicable in the current flow. */
     NOT_APPLICABLE,
-    /** 验签失败。 */
+    /** Signature verification failed. */
     FAILED
 }

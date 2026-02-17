@@ -4,12 +4,12 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- * 解密侧密钥材料。
+ * Decryption-side key material.
  *
- * @param keyId 密钥标识
- * @param x25519PrivateKey 可选 X25519 私钥
- * @param mlkem768PrivateKey 可选 ML-KEM-768 私钥
- * @param metadata 可扩展元数据
+ * @param keyId key identifier
+ * @param x25519PrivateKey optional X25519 private key
+ * @param mlkem768PrivateKey optional ML-KEM-768 private key
+ * @param metadata extensible metadata
  */
 public record DecryptionKeyMaterial(
     String keyId,
@@ -20,7 +20,7 @@ public record DecryptionKeyMaterial(
 
     public DecryptionKeyMaterial {
         keyId = SpiChecks.requireNonBlank(keyId, "keyId");
-        // 至少包含一种可用解密私钥。
+        // Must contain at least one usable private key for decryption.
         if (x25519PrivateKey == null && mlkem768PrivateKey == null) {
             throw new IllegalArgumentException("at least one private key is required");
         }
@@ -31,13 +31,13 @@ public record DecryptionKeyMaterial(
 
     @Override
     public byte[] x25519PrivateKey() {
-        // 返回副本，避免泄露内部可变数组。
+        // Return a copy to avoid exposing internal mutable arrays.
         return copyNullable(x25519PrivateKey);
     }
 
     @Override
     public byte[] mlkem768PrivateKey() {
-        // 返回副本，避免泄露内部可变数组。
+        // Return a copy to avoid exposing internal mutable arrays.
         return copyNullable(mlkem768PrivateKey);
     }
 

@@ -5,15 +5,15 @@ import com.windletter.api.enums.VerificationStatus;
 import com.windletter.core.error.ErrorCode;
 
 /**
- * 接收侧返回结果。
+ * Receiver-side result.
  *
- * @param status 解密总状态
- * @param payload 仅在 SUCCESS 时存在
- * @param senderIdentity 验签成功后可选提供
- * @param verificationStatus 验签状态
- * @param errorCode 非成功时可选错误码
- * @param messageId 内层 wind_id（可选）
- * @param timestamp 内层 ts（可选）
+ * @param status overall decryption status
+ * @param payload present only when status is SUCCESS
+ * @param senderIdentity optionally provided after successful signature verification
+ * @param verificationStatus verification status
+ * @param errorCode optional error code when not successful
+ * @param messageId inner wind_id (optional)
+ * @param timestamp inner ts (optional)
  */
 public record DecryptResult(
     DecryptStatus status,
@@ -25,10 +25,15 @@ public record DecryptResult(
     Long timestamp
 ) {
 
+    /**
+     * Canonical constructor with result-semantic consistency checks.
+     *
+     * @throws IllegalArgumentException if status/payload/errorCode combinations are inconsistent
+     */
     public DecryptResult {
         status = ModelChecks.requireNonNull(status, "status");
         verificationStatus = ModelChecks.requireNonNull(verificationStatus, "verificationStatus");
-        // 结果语义约束：成功必须带 payload，失败必须不带 payload。
+        // Result semantic constraints: success must contain payload, failure must not contain payload.
         if (status == DecryptStatus.SUCCESS && payload == null) {
             throw new IllegalArgumentException("payload is required when status is SUCCESS");
         }

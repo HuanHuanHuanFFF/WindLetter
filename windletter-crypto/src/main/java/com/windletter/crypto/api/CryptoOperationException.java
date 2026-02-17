@@ -1,9 +1,9 @@
 package com.windletter.crypto.api;
 
 /**
- * 密码学操作失败异常。
+ * Exception for cryptographic operation failures.
  * <p>
- * 用于封装底层密码库抛出的实现细节异常，向上层提供稳定语义。
+ * Wraps implementation-specific exceptions from underlying crypto libraries and exposes stable semantics to upper layers.
  */
 public class CryptoOperationException extends RuntimeException {
 

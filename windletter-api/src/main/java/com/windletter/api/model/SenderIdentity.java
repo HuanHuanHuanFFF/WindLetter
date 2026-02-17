@@ -3,11 +3,11 @@ package com.windletter.api.model;
 import java.util.Map;
 
 /**
- * 验签后可返回的发送方身份信息。
+ * Sender identity information optionally returned after signature verification.
  *
- * @param senderId 发送方身份 ID
- * @param signingKid 签名 kid
- * @param attributes 可扩展元数据
+ * @param senderId sender identity ID
+ * @param signingKid signing kid
+ * @param attributes extensible metadata
  */
 public record SenderIdentity(String senderId, String signingKid, Map<String, String> attributes) {
 

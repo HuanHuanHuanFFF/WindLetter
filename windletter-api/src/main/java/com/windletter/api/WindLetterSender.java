@@ -5,19 +5,27 @@ import com.windletter.api.model.EncryptRequest;
 import com.windletter.api.model.EncryptedMessage;
 
 /**
- * 发送侧门面接口。
+ * Sender-side facade interface.
  * <p>
- * 该接口只定义调用契约，不包含协议编排或密码实现。
+ * This interface only defines the call contract and does not include protocol orchestration or cryptographic implementation.
  */
 public interface WindLetterSender {
 
     /**
-     * 仅加密，不做签名。
+     * Encrypt only, without signing.
+     *
+     * @param req sender-side encryption request
+     * @return encrypted message in stable wire container form
+     * @throws IllegalArgumentException if request validation fails
      */
     EncryptedMessage encrypt(EncryptRequest req);
 
     /**
-     * 加密并附加签名。
+     * Encrypt and attach a signature.
+     *
+     * @param req sender-side encrypt-and-sign request
+     * @return encrypted message in stable wire container form
+     * @throws IllegalArgumentException if request validation fails
      */
     EncryptedMessage encryptAndSign(EncryptAndSignRequest req);
 }

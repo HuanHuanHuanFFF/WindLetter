@@ -4,9 +4,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * model 包内部校验工具。
+ * Internal validation helpers for the model package.
  * <p>
- * 统一抛出 {@link IllegalArgumentException}，便于调用方稳定处理参数错误。
+ * Throws {@link IllegalArgumentException} consistently for stable parameter-error handling.
  */
 final class ModelChecks {
 
@@ -14,7 +14,7 @@ final class ModelChecks {
     }
 
     /**
-     * 要求字段非 null。
+     * Require field to be non-null.
      */
     static <T> T requireNonNull(T value, String field) {
         if (value == null) {
@@ -24,7 +24,7 @@ final class ModelChecks {
     }
 
     /**
-     * 要求字符串非空白。
+     * Require string to be non-blank.
      */
     static String requireNonBlank(String value, String field) {
         if (isBlank(value)) {
@@ -34,7 +34,7 @@ final class ModelChecks {
     }
 
     /**
-     * 复制并冻结 list，同时要求非空。
+     * Copy and freeze list, and require non-empty.
      */
     static <T> List<T> copyNonEmptyList(List<T> input, String field) {
         requireNonNull(input, field);
@@ -45,14 +45,14 @@ final class ModelChecks {
     }
 
     /**
-     * 复制并冻结 map，null 时返回空 map。
+     * Copy and freeze map; return empty map when null.
      */
     static <K, V> Map<K, V> copyMap(Map<K, V> input) {
         return input == null ? Map.of() : Map.copyOf(input);
     }
 
     /**
-     * 判空白（null/empty/blank）。
+     * Blank check (null/empty/blank).
      */
     static boolean isBlank(String value) {
         return value == null || value.isBlank();

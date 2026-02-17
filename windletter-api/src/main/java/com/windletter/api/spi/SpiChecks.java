@@ -3,7 +3,7 @@ package com.windletter.api.spi;
 import java.util.Map;
 
 /**
- * spi 包内部校验工具。
+ * Internal validation helpers for the spi package.
  */
 final class SpiChecks {
 
@@ -11,7 +11,7 @@ final class SpiChecks {
     }
 
     /**
-     * 要求字符串非空白。
+     * Require string to be non-blank.
      */
     static String requireNonBlank(String value, String field) {
         if (value == null || value.isBlank()) {
@@ -21,7 +21,7 @@ final class SpiChecks {
     }
 
     /**
-     * 复制并冻结 map，null 时返回空 map。
+     * Copy and freeze map; return empty map when null.
      */
     static <K, V> Map<K, V> copyMap(Map<K, V> input) {
         return input == null ? Map.of() : Map.copyOf(input);

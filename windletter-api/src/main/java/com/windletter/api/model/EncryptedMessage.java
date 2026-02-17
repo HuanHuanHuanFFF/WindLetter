@@ -4,15 +4,20 @@ import com.windletter.api.enums.ArmorFormat;
 import java.util.Arrays;
 
 /**
- * 对外稳定密文载体。
+ * Stable outward-facing encrypted message container.
  *
- * @param wireJson 标准 wire JSON（必填）
- * @param armor 可选文本封装表示
- * @param armorBytes 可选二进制封装表示（仅 BINARY 使用）
- * @param armorFormat armor 的格式，null 时默认 NONE
+ * @param wireJson standard wire JSON (required)
+ * @param armor optional text armor representation
+ * @param armorBytes optional binary armor representation (used only for BINARY)
+ * @param armorFormat armor format, defaults to NONE when null
  */
 public record EncryptedMessage(String wireJson, String armor, byte[] armorBytes, ArmorFormat armorFormat) {
 
+    /**
+     * Canonical constructor with wire/armor consistency checks.
+     *
+     * @throws IllegalArgumentException if wire/armor fields conflict with {@code armorFormat}
+     */
     public EncryptedMessage {
         wireJson = ModelChecks.requireNonBlank(wireJson, "wireJson");
         armorFormat = armorFormat == null ? ArmorFormat.NONE : armorFormat;
@@ -48,7 +53,7 @@ public record EncryptedMessage(String wireJson, String armor, byte[] armorBytes,
     }
 
     /**
-     * 返回二进制封装副本，避免外部修改内部状态。
+     * Returns a copy of binary armor to prevent external mutation of internal state.
      */
     @Override
     public byte[] armorBytes() {

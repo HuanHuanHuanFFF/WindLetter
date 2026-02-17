@@ -3,12 +3,12 @@ package com.windletter.api.model;
 import java.util.Map;
 
 /**
- * 发送侧收件人引用。
+ * Sender-side recipient reference.
  *
- * @param recipientId 业务层收件人标识
- * @param x25519Kid X25519 公钥 kid（可选）
- * @param mlkem768Kid ML-KEM-768 公钥 kid（可选）
- * @param attributes 可扩展附加信息
+ * @param recipientId application-level recipient identifier
+ * @param x25519Kid X25519 public-key kid (optional)
+ * @param mlkem768Kid ML-KEM-768 public-key kid (optional)
+ * @param attributes extensible additional info
  */
 public record RecipientRef(
     String recipientId,
@@ -19,7 +19,7 @@ public record RecipientRef(
 
     public RecipientRef {
         recipientId = ModelChecks.requireNonBlank(recipientId, "recipientId");
-        // 至少提供一种可用于密钥解析的标识。
+        // Provide at least one identifier usable for key resolution.
         if (ModelChecks.isBlank(x25519Kid) && ModelChecks.isBlank(mlkem768Kid)) {
             throw new IllegalArgumentException("at least one recipient key reference must be provided");
         }

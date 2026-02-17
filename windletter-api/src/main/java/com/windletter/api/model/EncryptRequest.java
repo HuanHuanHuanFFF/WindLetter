@@ -3,18 +3,19 @@ package com.windletter.api.model;
 import com.windletter.api.enums.ArmorFormat;
 import com.windletter.api.enums.KeyAlgProfile;
 import com.windletter.api.enums.WindMode;
+
 import java.util.List;
 import java.util.Map;
 
 /**
- * 发送侧加密请求（不含签名身份）。
+ * Sender-side encryption request (without signing identity).
  *
- * @param mode 传输模式
- * @param keyAlgProfile 密钥算法 profile
- * @param armorFormat 输出 armor 格式，null 时默认 NONE
- * @param payload 业务载荷
- * @param recipients 收件人列表（非空）
- * @param customHeaders 可选自定义头扩展
+ * @param mode transport mode
+ * @param keyAlgProfile key algorithm profile
+ * @param armorFormat output armor format, defaults to NONE when null
+ * @param payload business payload
+ * @param recipients recipient list (non-empty)
+ * @param customHeaders optional custom header extensions
  */
 public record EncryptRequest(
     WindMode mode,
@@ -25,12 +26,17 @@ public record EncryptRequest(
     Map<String, Object> customHeaders
 ) {
 
+    /**
+     * Canonical constructor with contract validation and immutable-copy normalization.
+     *
+     * @throws IllegalArgumentException if required fields are missing or recipients is empty
+     */
     public EncryptRequest {
         mode = ModelChecks.requireNonNull(mode, "mode");
         keyAlgProfile = ModelChecks.requireNonNull(keyAlgProfile, "keyAlgProfile");
         armorFormat = armorFormat == null ? ArmorFormat.NONE : armorFormat;
         payload = ModelChecks.requireNonNull(payload, "payload");
-        // 固化不可变视图，避免调用方后续修改入参影响请求对象。
+        // Freeze immutable views to avoid later caller-side mutations affecting this request object.
         recipients = ModelChecks.copyNonEmptyList(recipients, "recipients");
         customHeaders = ModelChecks.copyMap(customHeaders);
     }

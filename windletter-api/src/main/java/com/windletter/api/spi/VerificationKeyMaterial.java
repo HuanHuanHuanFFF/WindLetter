@@ -4,11 +4,11 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- * 验签公钥材料。
+ * Verification public-key material.
  *
- * @param signingKid 签名 kid
- * @param ed25519PublicKey Ed25519 公钥
- * @param metadata 可扩展元数据
+ * @param signingKid signing kid
+ * @param ed25519PublicKey Ed25519 public key
+ * @param metadata extensible metadata
  */
 public record VerificationKeyMaterial(
     String signingKid,
@@ -27,7 +27,7 @@ public record VerificationKeyMaterial(
 
     @Override
     public byte[] ed25519PublicKey() {
-        // 返回副本，避免外部修改内部公钥数组。
+        // Return a copy to avoid external mutation of internal public-key arrays.
         return Arrays.copyOf(ed25519PublicKey, ed25519PublicKey.length);
     }
 }

@@ -5,24 +5,24 @@ import com.windletter.api.model.SigningIdentityRef;
 import java.util.Optional;
 
 /**
- * 身份解析接口。
+ * Identity resolution interface.
  * <p>
- * 同时服务发送侧（签名身份材料）与接收侧（验签公钥、发送方展示信息）。
+ * Serves both sender-side (signing identity material) and receiver-side (verification public keys and sender display identity).
  */
 public interface IdentityService {
 
     /**
-     * 解析发送侧签名身份材料。
+     * Resolve sender-side signing identity material.
      */
     Optional<SigningIdentityMaterial> resolveSigningIdentity(SigningIdentityRef signingIdentityRef);
 
     /**
-     * 通过 signing kid 查询验签公钥。
+     * Look up verification public key by signing kid.
      */
     Optional<VerificationKeyMaterial> resolveVerificationKeyByKid(String signingKid);
 
     /**
-     * 通过 signing kid 查询发送方展示身份。
+     * Look up sender display identity by signing kid.
      */
     Optional<SenderIdentity> resolveSenderBySigningKid(String signingKid);
 }

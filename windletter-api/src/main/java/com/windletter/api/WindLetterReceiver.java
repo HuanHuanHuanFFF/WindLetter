@@ -4,19 +4,27 @@ import com.windletter.api.model.DecryptRequest;
 import com.windletter.api.model.DecryptResult;
 
 /**
- * 接收侧门面接口。
+ * Receiver-side facade interface.
  * <p>
- * 该接口只定义输入输出与结果语义，具体验签/解密流程由实现层提供。
+ * This interface only defines inputs, outputs, and result semantics; concrete verify/decrypt flow is provided by implementations.
  */
 public interface WindLetterReceiver {
 
     /**
-     * 解密消息，验签策略由 {@code DecryptRequest.verificationPolicy} 决定。
+     * Decrypt a message, with verification behavior determined by {@code DecryptRequest.verificationPolicy}.
+     *
+     * @param req receiver-side decrypt request
+     * @return decrypt result including status, optional payload, and optional verification details
+     * @throws IllegalArgumentException if request validation fails
      */
     DecryptResult decrypt(DecryptRequest req);
 
     /**
-     * 解密并要求执行验签语义（实现可比 {@link #decrypt(DecryptRequest)} 更严格）。
+     * Decrypt and enforce verification semantics (implementations may be stricter than {@link #decrypt(DecryptRequest)}).
+     *
+     * @param req receiver-side decrypt request
+     * @return decrypt result including status, optional payload, and verification outcome
+     * @throws IllegalArgumentException if request validation fails
      */
     DecryptResult decryptAndVerify(DecryptRequest req);
 }

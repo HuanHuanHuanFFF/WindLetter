@@ -13,6 +13,8 @@ public interface A256GcmCrypto {
      * @param aad optional AAD, may be null
      * @param plaintext plaintext bytes
      * @return ciphertext and 16-byte authentication tag
+     * @throws IllegalArgumentException if key/iv length is invalid or plaintext is null
+     * @throws CryptoOperationException if encryption fails in the underlying crypto provider
      */
     AeadCiphertext encrypt(byte[] key, byte[] iv, byte[] aad, byte[] plaintext);
 
@@ -25,6 +27,8 @@ public interface A256GcmCrypto {
      * @param ciphertext ciphertext bytes
      * @param tag 16-byte authentication tag
      * @return decrypted plaintext bytes
+     * @throws IllegalArgumentException if key/iv/tag length is invalid or ciphertext is null
+     * @throws CryptoOperationException if authentication fails or decryption fails
      */
     byte[] decrypt(byte[] key, byte[] iv, byte[] aad, byte[] ciphertext, byte[] tag);
 }

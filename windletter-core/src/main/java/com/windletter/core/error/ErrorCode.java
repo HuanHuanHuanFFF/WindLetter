@@ -1,31 +1,31 @@
 package com.windletter.core.error;
 
 /**
- * 对外稳定错误码。
+ * Stable outward-facing error codes.
  * <p>
- * 这里的枚举是 API 层与实现层之间的统一契约，新增时应保持向后兼容。
+ * This enum is the shared contract between API and implementation layers; additions should remain backward compatible.
  */
 public enum ErrorCode {
-    /** Wire 结构或 JSON 形态不合法。 */
+    /** Wire structure or JSON shape is invalid. */
     MALFORMED_WIRE,
-    /** 协议版本不支持。 */
+    /** Protocol version is not supported. */
     UNSUPPORTED_VERSION,
-    /** 算法或算法组合不支持。 */
+    /** Algorithm or algorithm combination is not supported. */
     UNSUPPORTED_ALGORITHM,
-    /** 消息不是发给当前身份。 */
+    /** Message is not addressed to the current identity. */
     NOT_FOR_ME,
-    /** AAD 复算不一致。 */
+    /** Recomputed AAD does not match. */
     AAD_MISMATCH,
-    /** CEK unwrap 失败。 */
+    /** CEK unwrap failed. */
     KEY_UNWRAP_FAILED,
-    /** GCM 认证失败（含 tag 校验失败）。 */
+    /** GCM authentication failed (including tag verification failure). */
     GCM_AUTH_FAILED,
-    /** 内外层绑定校验失败。 */
+    /** Inner/outer binding validation failed. */
     BINDING_FAILED,
-    /** 签名校验失败。 */
+    /** Signature validation failed. */
     SIGNATURE_INVALID,
-    /** 字段缺失、冲突或取值非法。 */
+    /** Field is missing, conflicting, or has an invalid value. */
     INVALID_FIELD,
-    /** 其他未分类内部错误。 */
+    /** Other uncategorized internal errors. */
     INTERNAL_ERROR
 }

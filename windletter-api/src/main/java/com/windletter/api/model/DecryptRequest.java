@@ -5,14 +5,14 @@ import com.windletter.api.enums.VerificationPolicy;
 import java.util.Arrays;
 
 /**
- * 接收侧解密请求。
+ * Receiver-side decrypt request.
  *
- * @param wireJson 原始 wire JSON
- * @param armor 文本封装
- * @param armorBytes 二进制封装
- * @param armorFormat armor 格式。为 null 表示自动识别
- * @param myIdentity 本地接收身份
- * @param verificationPolicy 验签策略，null 时默认 AUTO_BY_CTY
+ * @param wireJson raw wire JSON
+ * @param armor text armor
+ * @param armorBytes binary armor
+ * @param armorFormat armor format; null means auto-detect
+ * @param myIdentity local receiver identity
+ * @param verificationPolicy verification policy, defaults to AUTO_BY_CTY when null
  */
 public record DecryptRequest(
     String wireJson,
@@ -23,6 +23,11 @@ public record DecryptRequest(
     VerificationPolicy verificationPolicy
 ) {
 
+    /**
+     * Canonical constructor with input-shape validation and armor-format compatibility checks.
+     *
+     * @throws IllegalArgumentException if no input representation is provided or armor settings conflict
+     */
     public DecryptRequest {
         armorBytes = copyNullable(armorBytes);
 
@@ -30,7 +35,7 @@ public record DecryptRequest(
         boolean hasTextArmor = !ModelChecks.isBlank(armor);
         boolean hasBinaryArmor = armorBytes != null && armorBytes.length > 0;
 
-        // 保证调用方至少提供一种输入表示。
+        // Ensure the caller provides at least one input representation.
         if (!hasWireJson && !hasTextArmor && !hasBinaryArmor) {
             throw new IllegalArgumentException("wireJson, armor or armorBytes must be provided");
         }
@@ -45,7 +50,7 @@ public record DecryptRequest(
             if (hasBinaryArmor) {
                 armorFormat = ArmorFormat.BINARY;
             } else if (hasTextArmor) {
-                // 文本封装但未指定格式时，交由后续解析器自动识别具体文本格式。
+                // When text armor is provided without format, let downstream parser auto-detect the concrete armor format.
                 armorFormat = null;
             } else {
                 armorFormat = ArmorFormat.NONE;
@@ -76,7 +81,7 @@ public record DecryptRequest(
     }
 
     /**
-     * 返回二进制封装副本，避免外部修改内部状态。
+     * Returns a copy of binary armor to prevent external mutation of internal state.
      */
     @Override
     public byte[] armorBytes() {

@@ -1,11 +1,11 @@
 package com.windletter.api.enums;
 
 /**
- * 传输模式。
+ * Transport mode.
  */
 public enum WindMode {
-    /** 公开模式，收件人标识可见。 */
+    /** Public mode, recipient identifiers are visible. */
     PUBLIC,
-    /** 混淆模式，使用 rid 与填充减少关系暴露。 */
+    /** Obfuscation mode, uses rid and padding to reduce relationship exposure. */
     OBFUSCATION
 }

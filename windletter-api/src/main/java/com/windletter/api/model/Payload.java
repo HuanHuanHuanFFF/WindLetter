@@ -3,14 +3,19 @@ package com.windletter.api.model;
 import java.util.Arrays;
 
 /**
- * 业务载荷。
+ * Business payload.
  *
- * @param contentType MIME 类型
- * @param data 原始字节数据
- * @param originalSize 原始长度（>= 0）
+ * @param contentType MIME type
+ * @param data raw byte data
+ * @param originalSize original size (>= 0)
  */
 public record Payload(String contentType, byte[] data, long originalSize) {
 
+    /**
+     * Canonical constructor with payload-field validation and defensive copy.
+     *
+     * @throws IllegalArgumentException if contentType/data/originalSize is invalid
+     */
     public Payload {
         contentType = ModelChecks.requireNonBlank(contentType, "contentType");
         ModelChecks.requireNonNull(data, "data");
@@ -21,7 +26,7 @@ public record Payload(String contentType, byte[] data, long originalSize) {
     }
 
     /**
-     * 返回数据副本，避免外部修改内部状态。
+     * Returns a copy of data to prevent external mutation of internal state.
      */
     @Override
     public byte[] data() {

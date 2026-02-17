@@ -7,20 +7,20 @@ import org.bouncycastle.crypto.generators.HKDFBytesGenerator;
 import org.bouncycastle.crypto.params.HKDFParameters;
 
 /**
- * 基于 Bouncy Castle 的 HKDF-SHA256 实现。
+ * Bouncy Castle-based HKDF-SHA256 implementation.
  */
 public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
 
     /**
-     * SHA-256 的摘要长度（字节）。
+     * SHA-256 digest length (bytes).
      */
     private static final int HASH_LEN = 32;
     /**
-     * RFC 5869 限制：最大输出长度 = 255 * HashLen。
+     * RFC 5869 limit: maximum output length = 255 * HashLen.
      */
     private static final int MAX_OKM_LENGTH = 255 * HASH_LEN;
     /**
-     * 工程约束：限制 info 长度，避免异常超长输入。
+     * Engineering constraint: limit info length to avoid abnormal oversized input.
      */
     private static final int MAX_INFO_LENGTH = 1024;
 

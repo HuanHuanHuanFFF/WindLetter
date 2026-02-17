@@ -7,7 +7,7 @@ import org.bouncycastle.crypto.params.X25519PrivateKeyParameters;
 import org.bouncycastle.crypto.params.X25519PublicKeyParameters;
 
 /**
- * 基于 Bouncy Castle 的 X25519 实现。
+ * Bouncy Castle-based X25519 implementation.
  */
 public final class BouncyCastleX25519Crypto implements X25519Crypto {
 

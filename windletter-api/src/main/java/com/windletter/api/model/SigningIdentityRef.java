@@ -1,10 +1,10 @@
 package com.windletter.api.model;
 
 /**
- * 发送侧签名身份引用。
+ * Sender-side signing identity reference.
  *
- * @param identityId 业务身份 ID
- * @param signingKid 可选签名 kid 提示
+ * @param identityId business identity ID
+ * @param signingKid optional signing kid hint
  */
 public record SigningIdentityRef(String identityId, String signingKid) {
 

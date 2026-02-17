@@ -4,12 +4,12 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- * 发送侧签名身份材料。
+ * Sender-side signing identity material.
  *
- * @param identityId 业务身份 ID
- * @param signingKid 签名 kid
- * @param ed25519PrivateKey Ed25519 私钥
- * @param metadata 可扩展元数据
+ * @param identityId business identity ID
+ * @param signingKid signing kid
+ * @param ed25519PrivateKey Ed25519 private key
+ * @param metadata extensible metadata
  */
 public record SigningIdentityMaterial(
     String identityId,
@@ -30,7 +30,7 @@ public record SigningIdentityMaterial(
 
     @Override
     public byte[] ed25519PrivateKey() {
-        // 返回副本，避免外部修改内部密钥数组。
+        // Return a copy to avoid external mutation of internal key arrays.
         return Arrays.copyOf(ed25519PrivateKey, ed25519PrivateKey.length);
     }
 }

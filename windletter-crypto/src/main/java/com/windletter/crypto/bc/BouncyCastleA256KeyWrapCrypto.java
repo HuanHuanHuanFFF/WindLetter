@@ -7,7 +7,7 @@ import org.bouncycastle.crypto.engines.AESWrapEngine;
 import org.bouncycastle.crypto.params.KeyParameter;
 
 /**
- * 基于 Bouncy Castle 的 A256KW 实现。
+ * Bouncy Castle-based A256KW implementation.
  */
 public final class BouncyCastleA256KeyWrapCrypto implements A256KeyWrapCrypto {
 
@@ -64,7 +64,7 @@ public final class BouncyCastleA256KeyWrapCrypto implements A256KeyWrapCrypto {
         if ((wrappedKey.length % 8) != 0) {
             throw new IllegalArgumentException("wrappedKey length must be a multiple of 8");
         }
-        // RFC 3394: n >= 2，最短包裹结果为 16 + 8 = 24 字节。
+        // RFC 3394: n >= 2, minimum wrapped output size is 16 + 8 = 24 bytes.
         if (wrappedKey.length < 24) {
             throw new IllegalArgumentException("wrappedKey is too short");
         }
