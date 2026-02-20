@@ -38,7 +38,7 @@
 职责：
 
 - 提供密码原语适配接口与实现：X25519、ML-KEM-768、HKDF-SHA256、A256KW、A256GCM、Ed25519、SHA-256。
-- 提供算法 profile 注册（`X25519`、`X25519Kyber768`）与组合逻辑。
+- 提供算法 profile 注册（`X25519`、`X25519_ML_KEM_768`）与组合逻辑。
 - 提供常量时间比较能力（签名、哈希、rid）。
 
 边界：
@@ -138,7 +138,7 @@
 - `MUST` 严格执行字段必填/省略规则（尤其 signed/unsigned、ECC-only/Hybrid 差异）。
 - `MUST` 固定 v1.0 白名单：
   - `enc=A256GCM`
-  - `key_alg in {X25519, X25519Kyber768}`
+  - `key_alg in {X25519, X25519_ML_KEM_768}`
   - `alg=EdDSA`（仅签名模式）
 
 ## 8. 版本与兼容策略

@@ -25,7 +25,7 @@
 
 - `KeyAlgProfile`
   - `X25519`
-  - `X25519_KYBER768`
+  - `X25519_ML_KEM_768`
 
 - `SigningOption`
   - `SIGNED`

@@ -43,7 +43,7 @@
     - 密钥交换 / KEM：X25519（曲线为 OKP, crv = "X25519"）；
     - 签名：Ed25519（JWS.alg = "EdDSA"）；
   - PQC：
-    - KEM：`ML-KEM-768`（Kyber-768 对应的 Java 实现，使用 BouncyCastle PQC）。
+    - KEM：`ML-KEM-768`（ML-KEM-768 对应的 Java 实现，使用 BouncyCastle PQC）。
 - 收件人模式：
   - 必须支持：`wind_mode = "public"`；
   - 可为后续预留：`wind_mode = "obfuscation"`（混淆收件人），本迭代可以只做占位与解析。
@@ -96,7 +96,7 @@
   - X25519（密钥交换）：BouncyCastle `X25519` 实现；
   - Ed25519（签名）：BouncyCastle `Ed25519` 或 JDK 17 标准提供的 EdDSA 实现。
 - PQC（KEM）：
-  - ML-KEM-768（Kyber-768），建议使用 BouncyCastle PQC 模块。
+  - ML-KEM-768（ML-KEM-768），建议使用 BouncyCastle PQC 模块。
 - 哈希与 KDF：
   - SHA-256：JDK `MessageDigest`；
   - HKDF-SHA256：可使用成熟实现或在可信参考实现基础上移植。

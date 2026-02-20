@@ -44,11 +44,11 @@
 最小覆盖矩阵（至少）：
 
 1. public + signed + X25519
-2. public + signed + X25519Kyber768
+2. public + signed + X25519_ML_KEM_768
 3. public + unsigned + X25519
 4. obfuscation + signed + X25519
-5. obfuscation + signed + X25519Kyber768
-6. obfuscation + unsigned + X25519Kyber768
+5. obfuscation + signed + X25519_ML_KEM_768
+6. obfuscation + unsigned + X25519_ML_KEM_768
 
 每组包含：
 
