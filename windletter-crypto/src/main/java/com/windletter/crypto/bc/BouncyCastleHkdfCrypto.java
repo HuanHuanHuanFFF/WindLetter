@@ -1,5 +1,6 @@
 package com.windletter.crypto.bc;
 
+import com.windletter.crypto.api.CryptoOperationException;
 import com.windletter.crypto.api.HkdfCrypto;
 import java.util.Arrays;
 import org.bouncycastle.crypto.digests.SHA256Digest;
@@ -33,8 +34,12 @@ public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
         if (ikm == null || ikm.length == 0) {
             throw new IllegalArgumentException("ikm must not be empty");
         }
-        byte[] prk = newHkdf().extractPRK(salt, ikm);
-        return prk;
+        try {
+            byte[] prk = newHkdf().extractPRK(salt, ikm);
+            return prk;
+        } catch (RuntimeException e) {
+            throw new CryptoOperationException("failed to extract HKDF PRK", e);
+        }
     }
 
     @Override
@@ -45,11 +50,15 @@ public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
         validateLength(length);
         byte[] normalizedInfo = normalizeInfo(info);
 
-        HKDFBytesGenerator hkdf = newHkdf();
-        hkdf.init(HKDFParameters.skipExtractParameters(prk, normalizedInfo));
-        byte[] out = new byte[length];
-        hkdf.generateBytes(out, 0, length);
-        return out;
+        try {
+            HKDFBytesGenerator hkdf = newHkdf();
+            hkdf.init(HKDFParameters.skipExtractParameters(prk, normalizedInfo));
+            byte[] out = new byte[length];
+            hkdf.generateBytes(out, 0, length);
+            return out;
+        } catch (RuntimeException e) {
+            throw new CryptoOperationException("failed to expand HKDF output", e);
+        }
     }
 
     @Override
@@ -60,11 +69,15 @@ public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
         validateLength(length);
         byte[] normalizedInfo = normalizeInfo(info);
 
-        HKDFBytesGenerator hkdf = newHkdf();
-        hkdf.init(new HKDFParameters(ikm, salt, normalizedInfo));
-        byte[] out = new byte[length];
-        hkdf.generateBytes(out, 0, length);
-        return out;
+        try {
+            HKDFBytesGenerator hkdf = newHkdf();
+            hkdf.init(new HKDFParameters(ikm, salt, normalizedInfo));
+            byte[] out = new byte[length];
+            hkdf.generateBytes(out, 0, length);
+            return out;
+        } catch (RuntimeException e) {
+            throw new CryptoOperationException("failed to derive HKDF output", e);
+        }
     }
 
     private static void validateLength(int length) {

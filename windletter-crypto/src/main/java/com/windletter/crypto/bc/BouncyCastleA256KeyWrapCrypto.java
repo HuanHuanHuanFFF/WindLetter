@@ -19,22 +19,26 @@ public final class BouncyCastleA256KeyWrapCrypto implements A256KeyWrapCrypto {
     public byte[] wrap(byte[] kek, byte[] keyToWrap) {
         validateKek(kek);
         validatePlaintextKey(keyToWrap);
-        AESWrapEngine wrap = newWrap();
-        wrap.init(true, new KeyParameter(kek));
-        byte[] wrapped = wrap.wrap(keyToWrap, 0, keyToWrap.length);
-        return wrapped;
+        try {
+            AESWrapEngine wrap = newWrap();
+            wrap.init(true, new KeyParameter(kek));
+            byte[] wrapped = wrap.wrap(keyToWrap, 0, keyToWrap.length);
+            return wrapped;
+        } catch (RuntimeException e) {
+            throw new CryptoOperationException("failed to wrap key", e);
+        }
     }
 
     @Override
     public byte[] unwrap(byte[] kek, byte[] wrappedKey) {
         validateKek(kek);
         validateWrappedKey(wrappedKey);
-        AESWrapEngine unwrap = newWrap();
-        unwrap.init(false, new KeyParameter(kek));
         try {
+            AESWrapEngine unwrap = newWrap();
+            unwrap.init(false, new KeyParameter(kek));
             byte[] unwrapped = unwrap.unwrap(wrappedKey, 0, wrappedKey.length);
             return unwrapped;
-        } catch (InvalidCipherTextException e) {
+        } catch (InvalidCipherTextException | RuntimeException e) {
             throw new CryptoOperationException("failed to unwrap key", e);
         }
     }

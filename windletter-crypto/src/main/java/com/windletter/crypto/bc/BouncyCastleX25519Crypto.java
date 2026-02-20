@@ -1,5 +1,6 @@
 package com.windletter.crypto.bc;
 
+import com.windletter.crypto.api.CryptoOperationException;
 import com.windletter.crypto.api.X25519Crypto;
 import com.windletter.crypto.api.X25519KeyPair;
 import java.security.SecureRandom;
@@ -26,9 +27,14 @@ public final class BouncyCastleX25519Crypto implements X25519Crypto {
 
     @Override
     public X25519KeyPair generateKeyPair() {
-        X25519PrivateKeyParameters privateKey = new X25519PrivateKeyParameters(secureRandom);
-        X25519PublicKeyParameters publicKey = privateKey.generatePublicKey();
-        return new X25519KeyPair(privateKey.getEncoded(), publicKey.getEncoded());
+        try {
+            X25519PrivateKeyParameters privateKey = new X25519PrivateKeyParameters(secureRandom);
+            X25519PublicKeyParameters publicKey = privateKey.generatePublicKey();
+            X25519KeyPair result = new X25519KeyPair(privateKey.getEncoded(), publicKey.getEncoded());
+            return result;
+        } catch (RuntimeException e) {
+            throw new CryptoOperationException("failed to generate X25519 key pair", e);
+        }
     }
 
     @Override
@@ -40,10 +46,14 @@ public final class BouncyCastleX25519Crypto implements X25519Crypto {
             throw new IllegalArgumentException("peerPublicKey must be 32 bytes");
         }
 
-        X25519PrivateKeyParameters privateKeyParams = new X25519PrivateKeyParameters(privateKey, 0);
-        X25519PublicKeyParameters publicKeyParams = new X25519PublicKeyParameters(peerPublicKey, 0);
-        byte[] shared = new byte[32];
-        privateKeyParams.generateSecret(publicKeyParams, shared, 0);
-        return shared;
+        try {
+            X25519PrivateKeyParameters privateKeyParams = new X25519PrivateKeyParameters(privateKey, 0);
+            X25519PublicKeyParameters publicKeyParams = new X25519PublicKeyParameters(peerPublicKey, 0);
+            byte[] shared = new byte[32];
+            privateKeyParams.generateSecret(publicKeyParams, shared, 0);
+            return shared;
+        } catch (RuntimeException e) {
+            throw new CryptoOperationException("failed to derive X25519 shared secret", e);
+        }
     }
 }

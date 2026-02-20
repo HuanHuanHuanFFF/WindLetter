@@ -28,22 +28,21 @@ public final class BouncyCastleA256GcmCrypto implements A256GcmCrypto {
         validateKey(key);
         validateIv(iv);
         validatePlaintext(plaintext);
-
-        GCMModeCipher gcm = newGcm();
-        AEADParameters params = new AEADParameters(new KeyParameter(key),
-                TAG_BYTES_LEN * 8, iv, aad);
-        gcm.init(true, params);
-        byte[] ciphertextTag = new byte[gcm.getOutputSize(plaintext.length)];
-        int len = gcm.processBytes(plaintext, 0, plaintext.length, ciphertextTag, 0);
         try {
+            GCMModeCipher gcm = newGcm();
+            AEADParameters params = new AEADParameters(new KeyParameter(key),
+                    TAG_BYTES_LEN * 8, iv, aad);
+            gcm.init(true, params);
+            byte[] ciphertextTag = new byte[gcm.getOutputSize(plaintext.length)];
+            int len = gcm.processBytes(plaintext, 0, plaintext.length, ciphertextTag, 0);
             len += gcm.doFinal(ciphertextTag, len);
-        } catch (InvalidCipherTextException e) {
+            byte[] ciphertext = Arrays.copyOfRange(ciphertextTag, 0, len - TAG_BYTES_LEN);
+            byte[] tag = Arrays.copyOfRange(ciphertextTag, len - TAG_BYTES_LEN, len);
+            AeadCiphertext result = new AeadCiphertext(ciphertext, tag);
+            return result;
+        } catch (InvalidCipherTextException | RuntimeException e) {
             throw new CryptoOperationException("failed to encrypt with A256GCM", e);
         }
-
-        byte[] ciphertext = Arrays.copyOfRange(ciphertextTag, 0, len - TAG_BYTES_LEN);
-        byte[] tag = Arrays.copyOfRange(ciphertextTag, len - TAG_BYTES_LEN, len);
-        return new AeadCiphertext(ciphertext, tag);
     }
 
     @Override
@@ -52,25 +51,23 @@ public final class BouncyCastleA256GcmCrypto implements A256GcmCrypto {
         validateIv(iv);
         validateCiphertext(ciphertext);
         validateTag(tag);
-
-        byte[] ciphertextTag = new byte[ciphertext.length + tag.length];
-        System.arraycopy(ciphertext, 0, ciphertextTag, 0, ciphertext.length);
-        System.arraycopy(tag, 0, ciphertextTag, ciphertext.length, tag.length);
-
-        GCMModeCipher gcm = newGcm();
-        AEADParameters params = new AEADParameters(new KeyParameter(key),
-                TAG_BYTES_LEN * 8, iv, aad);
-        gcm.init(false, params);
-        byte[] plaintext = new byte[gcm.getOutputSize(ciphertextTag.length)];
-        int len = gcm.processBytes(ciphertextTag, 0, ciphertextTag.length, plaintext, 0);
         try {
+            byte[] ciphertextTag = new byte[ciphertext.length + tag.length];
+            System.arraycopy(ciphertext, 0, ciphertextTag, 0, ciphertext.length);
+            System.arraycopy(tag, 0, ciphertextTag, ciphertext.length, tag.length);
+
+            GCMModeCipher gcm = newGcm();
+            AEADParameters params = new AEADParameters(new KeyParameter(key),
+                    TAG_BYTES_LEN * 8, iv, aad);
+            gcm.init(false, params);
+            byte[] plaintext = new byte[gcm.getOutputSize(ciphertextTag.length)];
+            int len = gcm.processBytes(ciphertextTag, 0, ciphertextTag.length, plaintext, 0);
             len += gcm.doFinal(plaintext, len);
-        } catch (InvalidCipherTextException e) {
+            plaintext = Arrays.copyOf(plaintext, len);
+            return plaintext;
+        } catch (InvalidCipherTextException | RuntimeException e) {
             throw new CryptoOperationException("failed to decrypt with A256GCM", e);
         }
-
-        plaintext = Arrays.copyOf(plaintext, len);
-        return plaintext;
     }
 
     private static void validateKey(byte[] key) {
