@@ -2,10 +2,11 @@ package com.windletter.crypto.bc;
 
 import com.windletter.crypto.api.CryptoOperationException;
 import com.windletter.crypto.api.HkdfCrypto;
-import java.util.Arrays;
 import org.bouncycastle.crypto.digests.SHA256Digest;
 import org.bouncycastle.crypto.generators.HKDFBytesGenerator;
 import org.bouncycastle.crypto.params.HKDFParameters;
+
+import java.util.Arrays;
 
 /**
  * Bouncy Castle-based HKDF-SHA256 implementation.
@@ -20,10 +21,6 @@ public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
      * RFC 5869 limit: maximum output length = 255 * HashLen.
      */
     private static final int MAX_OKM_LENGTH = 255 * HASH_LEN;
-    /**
-     * Engineering constraint: limit info length to avoid abnormal oversized input.
-     */
-    private static final int MAX_INFO_LENGTH = 1024;
 
     private static HKDFBytesGenerator newHkdf() {
         return new HKDFBytesGenerator(new SHA256Digest());
@@ -92,9 +89,6 @@ public final class BouncyCastleHkdfCrypto implements HkdfCrypto {
     private static byte[] normalizeInfo(byte[] info) {
         if (info == null) {
             return new byte[0];
-        }
-        if (info.length > MAX_INFO_LENGTH) {
-            throw new IllegalArgumentException("info is too long");
         }
         return Arrays.copyOf(info, info.length);
     }

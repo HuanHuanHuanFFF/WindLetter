@@ -160,6 +160,21 @@
 
 - 解析失败归类为 `UNSUPPORTED` 或 `INVALID_MESSAGE`，不得泄露敏感细节。
 
+### 7.3 `windletter-crypto` 原语契约
+
+适用范围：
+
+- `X25519Crypto` / `Ed25519Crypto` / `MLKem768Crypto` 的私钥 `handle` 语义。
+- `HkdfCrypto` 的输入输出边界语义。
+
+约束：
+
+- 私钥 `handle` 为 provider-bound：必须由同一实现族消费；跨实现传入时按参数错误处理。
+- `handle.close()` 按幂等语义使用；关闭后调用 `publicKey()` 或依赖私钥运算的方法，返回 `IllegalStateException`。
+- `X25519` 对 low-order 对端公钥必须拒绝：若共享密钥全零，抛出 `CryptoOperationException`。
+- `Ed25519.verify(...)` 对“签名无效”返回 `false`；仅参数非法或底层异常时抛异常。
+- `HKDF expand/derive` 输出长度范围固定为 `1..8160`（RFC 5869：`255 * HashLen`，`HashLen=32`）。
+
 ## 8. 序列化与 wire 契约
 
 - `MUST` 输出协议定义字段名，不得自定义重命名。

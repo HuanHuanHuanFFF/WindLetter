@@ -56,6 +56,11 @@ test-results/
 **/failsafe-reports/
 
 # =========================
+# 本地测试向量（官方大向量文件，默认不入库）
+# =========================
+windletter-crypto/src/test/resources/vectors/cctv/*.properties
+
+# =========================
 # 系统文件
 # =========================
 .DS_Store

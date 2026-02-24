@@ -109,6 +109,22 @@ class BouncyCastleA256GcmCryptoTest {
         assertThrows(IllegalArgumentException.class, () -> crypto.decrypt(randomBytes(32), iv, aad, randomBytes(16), randomBytes(15)));
     }
 
+    @Test
+    void shouldMatchNistAesGcm256TestVector() {
+        byte[] key = hex("0000000000000000000000000000000000000000000000000000000000000000");
+        byte[] iv = hex("000000000000000000000000");
+        byte[] aad = new byte[0];
+        byte[] plaintext = hex("00000000000000000000000000000000");
+        byte[] expectedCiphertext = hex("cea7403d4d606b6e074ec5d3baf39d18");
+        byte[] expectedTag = hex("d0d1c8a799996bf0265b98b5d48ab919");
+
+        AeadCiphertext encrypted = crypto.encrypt(key, iv, aad, plaintext);
+
+        assertArrayEquals(expectedCiphertext, encrypted.ciphertext());
+        assertArrayEquals(expectedTag, encrypted.tag());
+        assertArrayEquals(plaintext, crypto.decrypt(key, iv, aad, encrypted.ciphertext(), encrypted.tag()));
+    }
+
     private byte[] randomBytes(int len) {
         byte[] out = new byte[len];
         secureRandom.nextBytes(out);
@@ -119,6 +135,15 @@ class BouncyCastleA256GcmCryptoTest {
         byte[] out = value.clone();
         if (out.length > 0) {
             out[0] ^= 0x01;
+        }
+        return out;
+    }
+
+    private static byte[] hex(String value) {
+        int len = value.length();
+        byte[] out = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            out[i / 2] = (byte) Integer.parseInt(value.substring(i, i + 2), 16);
         }
         return out;
     }

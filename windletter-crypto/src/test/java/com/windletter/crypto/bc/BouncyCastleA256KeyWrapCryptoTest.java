@@ -47,9 +47,31 @@ class BouncyCastleA256KeyWrapCryptoTest {
         assertThrows(CryptoOperationException.class, () -> crypto.unwrap(kek2, wrapped));
     }
 
+    @Test
+    void shouldMatchRfc3394Aes256KeyWrapTestVector() {
+        byte[] kek = hex("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
+        byte[] keyToWrap = hex("00112233445566778899AABBCCDDEEFF000102030405060708090A0B0C0D0E0F");
+        byte[] expectedWrapped = hex("28C9F404C4B810F4CBCCB35CFB87F8263F5786E2D80ED326CBC7F0E71A99F43BFB988B9B7A02DD21");
+
+        byte[] wrapped = crypto.wrap(kek, keyToWrap);
+        byte[] unwrapped = crypto.unwrap(kek, expectedWrapped);
+
+        assertArrayEquals(expectedWrapped, wrapped);
+        assertArrayEquals(keyToWrap, unwrapped);
+    }
+
     private byte[] randomBytes(int len) {
         byte[] out = new byte[len];
         secureRandom.nextBytes(out);
+        return out;
+    }
+
+    private static byte[] hex(String value) {
+        int len = value.length();
+        byte[] out = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            out[i / 2] = (byte) Integer.parseInt(value.substring(i, i + 2), 16);
+        }
         return out;
     }
 }

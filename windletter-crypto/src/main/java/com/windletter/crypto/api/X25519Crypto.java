@@ -3,26 +3,40 @@ package com.windletter.crypto.api;
 /**
  * X25519 primitive capability interface.
  * <p>
- * Used to generate key pairs and compute shared secrets.
+ * Used to generate/import private key handles and compute shared secrets.
+ * <p>
+ * Handle objects are provider-bound and must be consumed by the same crypto implementation family.
  */
 public interface X25519Crypto {
 
     /**
-     * Generate an X25519 key pair.
+     * Generate an X25519 private key handle.
      *
-     * @return immutable key pair container with 32-byte private/public key material
+     * @return private key handle
+     * This handle can be used for shared-secret derivation and public key export.
      * @throws CryptoOperationException if key generation fails in the underlying crypto provider
      */
-    X25519KeyPair generateKeyPair();
+    X25519PrivateKeyHandle generatePrivateKey();
 
     /**
-     * Compute X25519 shared secret using local private key and peer public key.
+     * Import an X25519 private key as a handle.
      *
-     * @param privateKey 32-byte X25519 private key
+     * @param privateKey 32-byte X25519 private key material
+     * @return private key handle
+     * @throws IllegalArgumentException if private key length is invalid
+     * @throws CryptoOperationException if key import fails in the underlying crypto provider
+     */
+    X25519PrivateKeyHandle importPrivateKey(byte[] privateKey);
+
+    /**
+     * Compute X25519 shared secret using local private key handle and peer public key.
+     *
+     * @param privateKey local private key handle
      * @param peerPublicKey 32-byte X25519 public key
      * @return 32-byte shared secret
-     * @throws IllegalArgumentException if key length constraints are violated
-     * @throws CryptoOperationException if shared-secret derivation fails
+     * @throws IllegalArgumentException if key/material constraints are violated, or if privateKey is from another implementation
+     * @throws IllegalStateException if private key handle has been closed
+     * @throws CryptoOperationException if shared-secret derivation fails or peer public key is low-order
      */
-    byte[] deriveSharedSecret(byte[] privateKey, byte[] peerPublicKey);
+    byte[] deriveSharedSecret(X25519PrivateKeyHandle privateKey, byte[] peerPublicKey);
 }

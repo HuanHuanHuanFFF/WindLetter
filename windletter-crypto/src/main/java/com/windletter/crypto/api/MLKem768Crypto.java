@@ -4,16 +4,28 @@ package com.windletter.crypto.api;
  * ML-KEM-768 KEM primitive capability interface.
  * <p>
  * Provides key generation, encapsulation, and decapsulation.
+ * <p>
+ * Private key handles are provider-bound and must be consumed by the same crypto implementation family.
  */
 public interface MLKem768Crypto {
 
     /**
-     * Generate an ML-KEM-768 key pair.
+     * Generate an ML-KEM-768 private key handle.
      *
-     * @return immutable key pair container with ML-KEM-768 key material
+     * @return private key handle
      * @throws CryptoOperationException if key generation fails in the underlying crypto provider
      */
-    MLKem768KeyPair generateKeyPair();
+    MLKem768PrivateKeyHandle generatePrivateKey();
+
+    /**
+     * Import an ML-KEM-768 private key as a handle.
+     *
+     * @param privateKey ML-KEM-768 private key material (2400 bytes, DK encoding)
+     * @return private key handle
+     * @throws IllegalArgumentException if private key length is invalid
+     * @throws CryptoOperationException if key import fails in the underlying crypto provider
+     */
+    MLKem768PrivateKeyHandle importPrivateKey(byte[] privateKey);
 
     /**
      * Encapsulate to a recipient public key.
@@ -28,11 +40,13 @@ public interface MLKem768Crypto {
     /**
      * Decapsulate a ciphertext using local private key.
      *
-     * @param privateKey ML-KEM-768 private key (2400 bytes)
+     * @param privateKey ML-KEM-768 private key handle
      * @param ciphertext ML-KEM-768 ciphertext (1088 bytes)
      * @return shared secret (32 bytes)
-     * @throws IllegalArgumentException if key/ciphertext length is invalid
+     * @throws IllegalArgumentException if key/ciphertext length is invalid, or if privateKey is from another implementation
+     * @throws IllegalStateException if private key handle has been closed
      * @throws CryptoOperationException if decapsulation fails in the underlying crypto provider
      */
-    byte[] decapsulate(byte[] privateKey, byte[] ciphertext);
+    byte[] decapsulate(MLKem768PrivateKeyHandle privateKey, byte[] ciphertext);
+
 }
