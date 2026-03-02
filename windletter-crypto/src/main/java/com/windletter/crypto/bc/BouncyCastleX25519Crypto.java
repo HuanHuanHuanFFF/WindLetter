@@ -55,17 +55,28 @@ public final class BouncyCastleX25519Crypto implements X25519Crypto {
         Handle internalHandle = requireHandle(privateKey);
         validatePeerPublicKey(peerPublicKey);
         internalHandle.ensureNotDestroyed();
+        if (isAllZero(peerPublicKey)) {
+            throw new CryptoOperationException("failed to derive X25519 shared secret: low-order public key");
+        }
+        byte[] shared = new byte[32];
+        boolean success = false;
         try {
             X25519PrivateKeyParameters privateKeyParams = new X25519PrivateKeyParameters(internalHandle.privateKey, 0);
             X25519PublicKeyParameters publicKeyParams = new X25519PublicKeyParameters(peerPublicKey, 0);
-            byte[] shared = new byte[32];
             privateKeyParams.generateSecret(publicKeyParams, shared, 0);
             if (isAllZero(shared)) {
                 throw new CryptoOperationException("failed to derive X25519 shared secret: low-order public key");
             }
+            success = true;
             return shared;
+        } catch (CryptoOperationException e) {
+            throw e;
         } catch (RuntimeException e) {
             throw new CryptoOperationException("failed to derive X25519 shared secret", e);
+        } finally {
+            if (!success) {
+                Arrays.fill(shared, (byte) 0);
+            }
         }
     }
 

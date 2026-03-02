@@ -16,6 +16,7 @@ import java.security.SecureRandom;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -95,6 +96,14 @@ class BouncyCastleMLKem768CryptoTest {
             assertThrows(IllegalStateException.class, privateKey::publicKey);
             assertThrows(IllegalStateException.class, () -> crypto.decapsulate(privateKey, encapsulation.ciphertext()));
         }
+    }
+
+    @Test
+    void shouldAllowIdempotentClose() {
+        MLKem768PrivateKeyHandle handle = crypto.generatePrivateKey();
+        handle.close();
+        assertDoesNotThrow(handle::close);
+        assertThrows(IllegalStateException.class, handle::publicKey);
     }
 
     @Test

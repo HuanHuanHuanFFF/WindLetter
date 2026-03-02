@@ -1,8 +1,10 @@
 package com.windletter.crypto.bc;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.windletter.crypto.api.CryptoOperationException;
 import com.windletter.crypto.api.X25519PrivateKeyHandle;
@@ -96,11 +98,27 @@ class BouncyCastleX25519CryptoTest {
     void shouldRejectLowOrderPeerPublicKey() {
         try (X25519PrivateKeyHandle privateKey = crypto.generatePrivateKey()) {
             byte[] lowOrderPublicKey = new byte[32];
-            assertThrows(
+            CryptoOperationException ex = assertThrows(
                 CryptoOperationException.class,
                 () -> crypto.deriveSharedSecret(privateKey, lowOrderPublicKey)
             );
+            assertTrue(ex.getMessage().contains("low-order public key"));
         }
+    }
+
+    @Test
+    void shouldAllowIdempotentClose() {
+        X25519PrivateKeyHandle handle = crypto.generatePrivateKey();
+        handle.close();
+        assertDoesNotThrow(handle::close);
+        assertThrows(IllegalStateException.class, handle::publicKey);
+    }
+
+    @Test
+    void shouldPrioritizeClosedHandleOverLowOrderPeerKey() {
+        X25519PrivateKeyHandle handle = crypto.generatePrivateKey();
+        handle.close();
+        assertThrows(IllegalStateException.class, () -> crypto.deriveSharedSecret(handle, new byte[32]));
     }
 
     private static byte[] hex(String value) {

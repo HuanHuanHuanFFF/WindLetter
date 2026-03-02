@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.security.SecureRandom;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -127,6 +128,28 @@ class BouncyCastleEd25519CryptoTest {
 
             assertThrows(IllegalStateException.class, privateKey::publicKey);
             assertThrows(IllegalStateException.class, () -> crypto.sign(privateKey, message));
+        }
+    }
+
+    @Test
+    void shouldAllowIdempotentClose() {
+        Ed25519PrivateKeyHandle handle = crypto.generatePrivateKey();
+        handle.close();
+        assertDoesNotThrow(handle::close);
+        assertThrows(IllegalStateException.class, handle::publicKey);
+    }
+
+    @Test
+    void shouldReturnFalseForMalformedLengthValidSignature() {
+        byte[] message = randomBytes(32);
+        try (Ed25519PrivateKeyHandle privateKey = crypto.generatePrivateKey()) {
+            byte[] malformedSignature = crypto.sign(privateKey, message);
+            for (int i = 32; i < malformedSignature.length; i++) {
+                malformedSignature[i] = (byte) 0xFF;
+            }
+
+            assertFalse(crypto.verify(privateKey.publicKey(), message, malformedSignature));
+            assertFalse(crypto.verify(privateKey.publicKey(), message, malformedSignature));
         }
     }
 
