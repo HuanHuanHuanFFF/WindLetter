@@ -24,6 +24,7 @@ dependency-reduced-pom.xml
 .run/
 .obsidian/
 doc/.obsidian/
+.dev/
 
 # =========================
 # 编译产物 / 临时文件

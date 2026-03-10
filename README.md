@@ -6,7 +6,8 @@ WindLetter 是一个面向 `Wind Letter v1.0` 协议的 Java 库项目。
 
 ## Repository Layout
 
-- `doc/`：协议规范、设计文档、开发参考与版本说明。
+- `docs/`：协议规范与长期维护的设计文档。
+- `.dev/`：本地开发辅助资料（默认忽略，不纳入版本库）。
 - `windletter-core/`：常量、错误模型、编码与基础工具。
 - `windletter-crypto/`：密码原语适配层（AEAD/KDF/KEM/签名等）。
 - `windletter-protocol/`：协议数据模型、规范化、绑定与校验逻辑。
@@ -34,10 +35,7 @@ mvn test
 
 ## Documentation
 
-- 文档索引见：`doc/README.md`
-- 当前主协议文档：`doc/Wind Letter v1.0协议.md`
-- 重构设计文档：
-  - `doc/ARCHITECTURE_V1_REWRITE.md`
-  - `doc/PROTOCOL_GAP_MATRIX.md`
-  - `doc/API_CONTRACT_V1.md`
-  - `doc/TEST_PLAN_V1.md`
+- 文档索引见：`docs/README.md`
+- 当前主协议文档：`docs/Wind Letter v1.0协议.md`
+- 当前设计文档：`docs/風笺设计.md`
+- 开发阶段辅助文档放在 `.dev/docs/`（本地使用，不入库）。
