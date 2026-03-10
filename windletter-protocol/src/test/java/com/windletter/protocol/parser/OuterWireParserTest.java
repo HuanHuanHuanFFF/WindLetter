@@ -1,0 +1,255 @@
+package com.windletter.protocol.parser;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.windletter.core.error.ErrorCode;
+import com.windletter.protocol.ProtocolException;
+import com.windletter.protocol.wire.OuterWireMessage;
+import com.windletter.protocol.wire.RecipientEntry;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class OuterWireParserTest {
+
+    private final OuterWireParser parser = new JacksonOuterWireParser();
+
+    @Test
+    void shouldParseValidWireMessage() {
+        OuterWireMessage message = parser.parse(validWireJson());
+
+        assertEquals("p-b64", message.protectedB64());
+        assertEquals("aad-b64", message.aadB64());
+        assertEquals("iv-b64", message.ivB64());
+        assertEquals("ct-b64", message.ciphertextB64());
+        assertEquals("tag-b64", message.tagB64());
+        assertEquals(1, message.recipients().size());
+
+        RecipientEntry recipient = message.recipients().get(0);
+        assertNotNull(recipient.kid());
+        assertEquals("kid-ecc", recipient.kid().x25519());
+        assertEquals("kid-pq", recipient.kid().mlkem768());
+        assertEquals("rid-1", recipient.rid());
+        assertEquals("ek-1", recipient.ek());
+        assertEquals("wrapped-1", recipient.encryptedKey());
+    }
+
+    @Test
+    void shouldThrowMalformedWireForInvalidJson() {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("{"));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    @Test
+    void shouldThrowMalformedWireWhenRootIsNotObject() {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("[]"));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenRequiredFieldMissing() {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("""
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64"
+            }
+            """));
+        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenTopLevelFieldTypeWrong() {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("""
+            {
+              "protected":"p-b64",
+              "aad":123,
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """));
+        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenTopLevelFieldUnknown() {
+        assertInvalidField(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"tag-b64\",\"extra\":\"x\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenRecipientFieldUnknown() {
+        assertInvalidField(validWireJson().replace(
+            "\"encrypted_key\":\"wrapped-1\"",
+            "\"encrypted_key\":\"wrapped-1\",\"unknown\":\"x\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenKidFieldUnknown() {
+        assertInvalidField(validWireJson().replace(
+            "\"mlkem768\":\"kid-pq\"",
+            "\"mlkem768\":\"kid-pq\",\"unknown\":\"x\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenRidIsNull() {
+        assertInvalidField(validWireJson().replace("\"rid\":\"rid-1\"", "\"rid\":null"));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenEkIsNull() {
+        assertInvalidField(validWireJson().replace("\"ek\":\"ek-1\"", "\"ek\":null"));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenEncryptedKeyIsNull() {
+        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"wrapped-1\"", "\"encrypted_key\":null"));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenKidIsNull() {
+        assertInvalidField("""
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[
+                {
+                  "kid":null,
+                  "rid":"rid-1",
+                  "ek":"ek-1",
+                  "encrypted_key":"wrapped-1"
+                }
+              ],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """);
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenKidX25519IsNull() {
+        assertInvalidField(validWireJson().replace("\"x25519\":\"kid-ecc\"", "\"x25519\":null"));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenKidMlkem768IsNull() {
+        assertInvalidField(validWireJson().replace("\"mlkem768\":\"kid-pq\"", "\"mlkem768\":null"));
+    }
+
+    @Test
+    void shouldThrowMalformedWireWhenTopLevelFieldDuplicated() {
+        assertMalformed("""
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "aad":"aad-dup",
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """);
+    }
+
+    @Test
+    void shouldThrowMalformedWireWhenRecipientFieldDuplicated() {
+        assertMalformed("""
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[
+                {
+                  "rid":"rid-1",
+                  "rid":"rid-2"
+                }
+              ],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """);
+    }
+
+    @Test
+    void shouldThrowMalformedWireWhenKidFieldDuplicated() {
+        assertMalformed("""
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[
+                {
+                  "kid":{
+                    "x25519":"kid-1",
+                    "x25519":"kid-2"
+                  }
+                }
+              ],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """);
+    }
+
+    @Test
+    void shouldUseStrictDuplicateDetectionWhenObjectMapperInjected() throws Exception {
+        ObjectMapper injectedMapper = new ObjectMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(injectedMapper);
+        String duplicateOuter = """
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "aad":"aad-dup",
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """;
+
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> injectedParser.parse(duplicateOuter));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+
+        JsonNode node = injectedMapper.readTree(duplicateOuter);
+        assertEquals("aad-dup", node.get("aad").textValue());
+    }
+
+    private void assertInvalidField(String wireJson) {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(wireJson));
+        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+    }
+
+    private void assertMalformed(String wireJson) {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(wireJson));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    private static String validWireJson() {
+        return """
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[
+                {
+                  "kid":{
+                    "x25519":"kid-ecc",
+                    "mlkem768":"kid-pq"
+                  },
+                  "rid":"rid-1",
+                  "ek":"ek-1",
+                  "encrypted_key":"wrapped-1"
+                }
+              ],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """;
+    }
+}
