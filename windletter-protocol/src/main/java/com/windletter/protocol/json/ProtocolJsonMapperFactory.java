@@ -2,6 +2,7 @@ package com.windletter.protocol.json;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
@@ -33,6 +34,7 @@ public final class ProtocolJsonMapperFactory {
 
     private static ObjectMapper applyStrictParserPolicy(ObjectMapper mapper) {
         mapper.getFactory().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+        mapper.enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
         mapper.getFactory().disable(JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature());
         mapper.getFactory().disable(JsonReadFeature.ALLOW_JAVA_COMMENTS.mappedFeature());

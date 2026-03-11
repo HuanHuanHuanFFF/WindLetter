@@ -60,6 +60,27 @@ class OuterWireParserTest {
     }
 
     @Test
+    void shouldThrowMalformedWireWhenTrailingObjectExists() {
+        assertMalformed(validWireJson() + "{\"junk\":1}");
+    }
+
+    @Test
+    void shouldThrowMalformedWireWhenTrailingNumberExists() {
+        assertMalformed(validWireJson() + "123");
+    }
+
+    @Test
+    void shouldThrowMalformedWireWhenTrailingArrayExists() {
+        assertMalformed(validWireJson() + "[]");
+    }
+
+    @Test
+    void shouldAllowTrailingWhitespaceOnly() {
+        OuterWireMessage message = parser.parse(validWireJson() + " \n\t ");
+        assertEquals("p-b64", message.protectedB64());
+    }
+
+    @Test
     void shouldThrowInvalidFieldWhenRequiredFieldMissing() {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("""
             {
