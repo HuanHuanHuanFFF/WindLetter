@@ -1,13 +1,13 @@
 package com.windletter.protocol.parser;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.windletter.core.error.ErrorCode;
 import com.windletter.protocol.ProtocolException;
+import com.windletter.protocol.json.ProtocolJsonMapperFactory;
 import com.windletter.protocol.wire.KidRef;
 import com.windletter.protocol.wire.OuterWireMessage;
 import com.windletter.protocol.wire.RecipientEntry;
@@ -28,14 +28,14 @@ public final class JacksonOuterWireParser implements OuterWireParser {
     private final ObjectMapper objectMapper;
 
     public JacksonOuterWireParser() {
-        this.objectMapper = createStrictMapper(new ObjectMapper());
+        this.objectMapper = ProtocolJsonMapperFactory.strictParserMapper();
     }
 
     public JacksonOuterWireParser(ObjectMapper objectMapper) {
         if (objectMapper == null) {
             throw new IllegalArgumentException("objectMapper must not be null");
         }
-        this.objectMapper = createStrictMapper(objectMapper.copy());
+        this.objectMapper = ProtocolJsonMapperFactory.strictParserMapper(objectMapper);
     }
 
     @Override
@@ -62,8 +62,15 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         if (wireJson == null) {
             throw malformedWire("outer wire JSON must not be null");
         }
+        if (wireJson.isBlank()) {
+            throw malformedWire("outer wire JSON must not be empty");
+        }
         try {
-            return objectMapper.readTree(wireJson);
+            JsonNode rootNode = objectMapper.readTree(wireJson);
+            if (rootNode == null) {
+                throw malformedWire("outer wire JSON must not be empty");
+            }
+            return rootNode;
         } catch (JsonProcessingException e) {
             if (isDuplicateFieldError(e)) {
                 throw malformedWire("outer wire JSON contains duplicate fields", e);
@@ -179,11 +186,6 @@ public final class JacksonOuterWireParser implements OuterWireParser {
 
     private static ProtocolException invalidField(String message) {
         return new ProtocolException(ErrorCode.INVALID_FIELD, message);
-    }
-
-    private static ObjectMapper createStrictMapper(ObjectMapper mapper) {
-        mapper.getFactory().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-        return mapper;
     }
 
     private static boolean isDuplicateFieldError(JsonProcessingException exception) {

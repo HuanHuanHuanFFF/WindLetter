@@ -2,6 +2,7 @@ package com.windletter.protocol.parser;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.windletter.core.error.ErrorCode;
 import com.windletter.protocol.ProtocolException;
 import com.windletter.protocol.wire.OuterWireMessage;
@@ -40,6 +41,16 @@ class OuterWireParserTest {
     void shouldThrowMalformedWireForInvalidJson() {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("{"));
         assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    @Test
+    void shouldThrowMalformedWireForEmptyJson() {
+        assertMalformed("");
+    }
+
+    @Test
+    void shouldThrowMalformedWireForBlankJson() {
+        assertMalformed("   \n\t  ");
     }
 
     @Test
@@ -258,6 +269,54 @@ class OuterWireParserTest {
         assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
     }
 
+    @Test
+    void shouldRejectSingleQuotesWhenLenientObjectMapperInjected() throws Exception {
+        ObjectMapper lenientMapper = newLenientMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
+        String singleQuotesJson = "{'protected':'p-b64','aad':'aad-b64','recipients':[],'iv':'iv-b64','ciphertext':'ct-b64','tag':'tag-b64'}";
+
+        JsonNode lenientNode = lenientMapper.readTree(singleQuotesJson);
+        assertEquals("aad-b64", lenientNode.get("aad").textValue());
+        assertMalformedWithParser(injectedParser, singleQuotesJson);
+    }
+
+    @Test
+    void shouldRejectCommentsWhenLenientObjectMapperInjected() {
+        ObjectMapper lenientMapper = newLenientMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
+        String commentJson = """
+            {
+              "protected":"p-b64",
+              // comment
+              "aad":"aad-b64",
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """;
+
+        assertMalformedWithParser(injectedParser, commentJson);
+    }
+
+    @Test
+    void shouldRejectTrailingCommaWhenLenientObjectMapperInjected() {
+        ObjectMapper lenientMapper = newLenientMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
+        String trailingCommaJson = """
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64",
+            }
+            """;
+
+        assertMalformedWithParser(injectedParser, trailingCommaJson);
+    }
+
     private void assertInvalidField(String wireJson) {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(wireJson));
         assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
@@ -266,6 +325,19 @@ class OuterWireParserTest {
     private void assertMalformed(String wireJson) {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(wireJson));
         assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    private void assertMalformedWithParser(OuterWireParser parserToUse, String wireJson) {
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parserToUse.parse(wireJson));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    private static ObjectMapper newLenientMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.getFactory().enable(JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature());
+        mapper.getFactory().enable(JsonReadFeature.ALLOW_JAVA_COMMENTS.mappedFeature());
+        mapper.getFactory().enable(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature());
+        return mapper;
     }
 
     private static String validWireJson() {
