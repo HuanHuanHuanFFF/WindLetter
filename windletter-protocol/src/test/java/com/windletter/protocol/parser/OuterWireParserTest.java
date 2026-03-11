@@ -110,6 +110,31 @@ class OuterWireParserTest {
     }
 
     @Test
+    void shouldThrowInvalidFieldWhenProtectedIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"protected\":\"p-b64\"", "\"protected\":\"abc+\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenAadIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"aad\":\"aad-b64\"", "\"aad\":\"abc=\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenIvIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"iv\":\"iv-b64\"", "\"iv\":\"ab c\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenCiphertextIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"ciphertext\":\"ct-b64\"", "\"ciphertext\":\"a/b\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenTagIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"abc=\""));
+    }
+
+    @Test
     void shouldThrowInvalidFieldWhenTopLevelFieldUnknown() {
         assertInvalidField(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"tag-b64\",\"extra\":\"x\""));
     }
@@ -134,8 +159,18 @@ class OuterWireParserTest {
     }
 
     @Test
+    void shouldThrowInvalidFieldWhenRidIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"rid\":\"rid-1\"", "\"rid\":\"ab+\""));
+    }
+
+    @Test
     void shouldThrowInvalidFieldWhenEkIsNull() {
         assertInvalidField(validWireJson().replace("\"ek\":\"ek-1\"", "\"ek\":null"));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenEkIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"ek\":\"ek-1\"", "\"ek\":\"a/b\""));
     }
 
     @Test
@@ -172,6 +207,11 @@ class OuterWireParserTest {
     }
 
     @Test
+    void shouldThrowInvalidFieldWhenEncryptedKeyIsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"wrapped-1\"", "\"encrypted_key\":\"a/b\""));
+    }
+
+    @Test
     void shouldThrowInvalidFieldWhenKidIsNull() {
         assertInvalidField("""
             {
@@ -198,8 +238,18 @@ class OuterWireParserTest {
     }
 
     @Test
+    void shouldThrowInvalidFieldWhenKidX25519IsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"x25519\":\"kid-ecc\"", "\"x25519\":\"kid=\""));
+    }
+
+    @Test
     void shouldThrowInvalidFieldWhenKidMlkem768IsNull() {
         assertInvalidField(validWireJson().replace("\"mlkem768\":\"kid-pq\"", "\"mlkem768\":null"));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenKidMlkem768IsNotBase64Url() {
+        assertInvalidField(validWireJson().replace("\"mlkem768\":\"kid-pq\"", "\"mlkem768\":\"kid pq\""));
     }
 
     @Test

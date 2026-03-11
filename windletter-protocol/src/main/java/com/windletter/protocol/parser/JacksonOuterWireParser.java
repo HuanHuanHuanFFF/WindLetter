@@ -15,6 +15,7 @@ import com.windletter.protocol.wire.RecipientEntry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Strict Jackson-based parser for Wind Letter outer wire transport JSON.
@@ -24,6 +25,7 @@ public final class JacksonOuterWireParser implements OuterWireParser {
     private static final Set<String> OUTER_FIELDS = Set.of("protected", "aad", "recipients", "iv", "ciphertext", "tag");
     private static final Set<String> RECIPIENT_FIELDS = Set.of("kid", "rid", "ek", "encrypted_key");
     private static final Set<String> KID_FIELDS = Set.of("x25519", "mlkem768");
+    private static final Pattern BASE64URL_NO_PADDING = Pattern.compile("^[A-Za-z0-9_-]*$");
 
     private final ObjectMapper objectMapper;
 
@@ -47,12 +49,12 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         ObjectNode root = (ObjectNode) rootNode;
         rejectUnknownFields(root, OUTER_FIELDS, "outer");
 
-        String protectedB64 = requireStringField(root, "protected");
-        String aadB64 = requireStringField(root, "aad");
+        String protectedB64 = requireBase64UrlField(root, "protected");
+        String aadB64 = requireBase64UrlField(root, "aad");
         ArrayNode recipientsNode = requireArrayField(root, "recipients");
-        String ivB64 = requireStringField(root, "iv");
-        String ciphertextB64 = requireStringField(root, "ciphertext");
-        String tagB64 = requireStringField(root, "tag");
+        String ivB64 = requireBase64UrlField(root, "iv");
+        String ciphertextB64 = requireBase64UrlField(root, "ciphertext");
+        String tagB64 = requireBase64UrlField(root, "tag");
 
         List<RecipientEntry> recipients = parseRecipients(recipientsNode);
         return new OuterWireMessage(protectedB64, aadB64, recipients, ivB64, ciphertextB64, tagB64);
@@ -91,9 +93,9 @@ public final class JacksonOuterWireParser implements OuterWireParser {
             ObjectNode recipient = (ObjectNode) recipientNode;
             rejectUnknownFields(recipient, RECIPIENT_FIELDS, "recipients[" + i + "]");
             KidRef kid = parseKid(recipient.get("kid"), i);
-            String rid = readOptionalString(recipient, "rid", "recipients[" + i + "].rid");
-            String ek = readOptionalString(recipient, "ek", "recipients[" + i + "].ek");
-            String encryptedKey = requireStringField(recipient, "encrypted_key", "recipients[" + i + "].encrypted_key");
+            String rid = readOptionalBase64UrlString(recipient, "rid", "recipients[" + i + "].rid");
+            String ek = readOptionalBase64UrlString(recipient, "ek", "recipients[" + i + "].ek");
+            String encryptedKey = requireBase64UrlField(recipient, "encrypted_key", "recipients[" + i + "].encrypted_key");
             recipients.add(new RecipientEntry(kid, rid, ek, encryptedKey));
         }
         return recipients;
@@ -111,8 +113,8 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         }
         ObjectNode kidObject = (ObjectNode) kidNode;
         rejectUnknownFields(kidObject, KID_FIELDS, "recipients[" + index + "].kid");
-        String x25519 = readOptionalString(kidObject, "x25519", "recipients[" + index + "].kid.x25519");
-        String mlkem768 = readOptionalString(kidObject, "mlkem768", "recipients[" + index + "].kid.mlkem768");
+        String x25519 = readOptionalBase64UrlString(kidObject, "x25519", "recipients[" + index + "].kid.x25519");
+        String mlkem768 = readOptionalBase64UrlString(kidObject, "mlkem768", "recipients[" + index + "].kid.mlkem768");
         return new KidRef(x25519, mlkem768);
     }
 
@@ -130,6 +132,18 @@ public final class JacksonOuterWireParser implements OuterWireParser {
             throw invalidField("field '" + fieldPath + "' must be a string");
         }
         return node.textValue();
+    }
+
+    private String requireBase64UrlField(ObjectNode parent, String field) {
+        String value = requireStringField(parent, field);
+        validateBase64UrlNoPadding(value, field);
+        return value;
+    }
+
+    private String requireBase64UrlField(ObjectNode parent, String field, String fieldPath) {
+        String value = requireStringField(parent, field, fieldPath);
+        validateBase64UrlNoPadding(value, fieldPath);
+        return value;
     }
 
     private ArrayNode requireArrayField(ObjectNode root, String field) {
@@ -168,6 +182,14 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         return node.textValue();
     }
 
+    private String readOptionalBase64UrlString(ObjectNode parent, String field, String fieldPath) {
+        String value = readOptionalString(parent, field, fieldPath);
+        if (value != null) {
+            validateBase64UrlNoPadding(value, fieldPath);
+        }
+        return value;
+    }
+
     private void rejectUnknownFields(ObjectNode objectNode, Set<String> allowedFields, String contextPath) {
         objectNode.fieldNames().forEachRemaining(fieldName -> {
             if (!allowedFields.contains(fieldName)) {
@@ -186,6 +208,12 @@ public final class JacksonOuterWireParser implements OuterWireParser {
 
     private static ProtocolException invalidField(String message) {
         return new ProtocolException(ErrorCode.INVALID_FIELD, message);
+    }
+
+    private static void validateBase64UrlNoPadding(String value, String fieldPath) {
+        if (!BASE64URL_NO_PADDING.matcher(value).matches()) {
+            throw invalidField("field '" + fieldPath + "' must be Base64URL without padding");
+        }
     }
 
     private static boolean isDuplicateFieldError(JsonProcessingException exception) {
