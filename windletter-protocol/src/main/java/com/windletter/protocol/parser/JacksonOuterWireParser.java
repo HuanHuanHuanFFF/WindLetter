@@ -214,6 +214,10 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         if (!BASE64URL_NO_PADDING.matcher(value).matches()) {
             throw invalidField("field '" + fieldPath + "' must be Base64URL without padding");
         }
+        // Minimal decodability check for unpadded Base64URL.
+        if (value.length() % 4 == 1) {
+            throw invalidField("field '" + fieldPath + "' must be Base64URL without padding");
+        }
     }
 
     private static boolean isDuplicateFieldError(JsonProcessingException exception) {

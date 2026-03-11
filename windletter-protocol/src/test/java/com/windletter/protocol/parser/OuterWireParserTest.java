@@ -21,20 +21,20 @@ class OuterWireParserTest {
     void shouldParseValidWireMessage() {
         OuterWireMessage message = parser.parse(validWireJson());
 
-        assertEquals("p-b64", message.protectedB64());
-        assertEquals("aad-b64", message.aadB64());
-        assertEquals("iv-b64", message.ivB64());
-        assertEquals("ct-b64", message.ciphertextB64());
-        assertEquals("tag-b64", message.tagB64());
+        assertEquals("cA", message.protectedB64());
+        assertEquals("YWE", message.aadB64());
+        assertEquals("aXY", message.ivB64());
+        assertEquals("Y3Q", message.ciphertextB64());
+        assertEquals("dGFn", message.tagB64());
         assertEquals(1, message.recipients().size());
 
         RecipientEntry recipient = message.recipients().get(0);
         assertNotNull(recipient.kid());
-        assertEquals("kid-ecc", recipient.kid().x25519());
-        assertEquals("kid-pq", recipient.kid().mlkem768());
-        assertEquals("rid-1", recipient.rid());
-        assertEquals("ek-1", recipient.ek());
-        assertEquals("wrapped-1", recipient.encryptedKey());
+        assertEquals("a2lkZWNj", recipient.kid().x25519());
+        assertEquals("a2lkcHE", recipient.kid().mlkem768());
+        assertEquals("cmlkMQ", recipient.rid());
+        assertEquals("ZWsx", recipient.ek());
+        assertEquals("d3JhcHBlZA", recipient.encryptedKey());
     }
 
     @Test
@@ -77,18 +77,18 @@ class OuterWireParserTest {
     @Test
     void shouldAllowTrailingWhitespaceOnly() {
         OuterWireMessage message = parser.parse(validWireJson() + " \n\t ");
-        assertEquals("p-b64", message.protectedB64());
+        assertEquals("cA", message.protectedB64());
     }
 
     @Test
     void shouldThrowInvalidFieldWhenRequiredFieldMissing() {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("""
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q"
             }
             """));
         assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
@@ -98,12 +98,12 @@ class OuterWireParserTest {
     void shouldThrowInvalidFieldWhenTopLevelFieldTypeWrong() {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse("""
             {
-              "protected":"p-b64",
+              "protected":"cA",
               "aad":123,
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """));
         assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
@@ -111,158 +111,168 @@ class OuterWireParserTest {
 
     @Test
     void shouldThrowInvalidFieldWhenProtectedIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"protected\":\"p-b64\"", "\"protected\":\"abc+\""));
+        assertInvalidField(validWireJson().replace("\"protected\":\"cA\"", "\"protected\":\"abc+\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenAadIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"aad\":\"aad-b64\"", "\"aad\":\"abc=\""));
+        assertInvalidField(validWireJson().replace("\"aad\":\"YWE\"", "\"aad\":\"abc=\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenIvIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"iv\":\"iv-b64\"", "\"iv\":\"ab c\""));
+        assertInvalidField(validWireJson().replace("\"iv\":\"aXY\"", "\"iv\":\"ab c\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenCiphertextIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"ciphertext\":\"ct-b64\"", "\"ciphertext\":\"a/b\""));
+        assertInvalidField(validWireJson().replace("\"ciphertext\":\"Y3Q\"", "\"ciphertext\":\"a/b\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenTagIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"abc=\""));
+        assertInvalidField(validWireJson().replace("\"tag\":\"dGFn\"", "\"tag\":\"abc=\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenTagBase64UrlLengthMod4IsOne() {
+        assertInvalidField(validWireJson().replace("\"tag\":\"dGFn\"", "\"tag\":\"abcde\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenTopLevelFieldUnknown() {
-        assertInvalidField(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"tag-b64\",\"extra\":\"x\""));
+        assertInvalidField(validWireJson().replace("\"tag\":\"dGFn\"", "\"tag\":\"dGFn\",\"extra\":\"x\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenRecipientFieldUnknown() {
         assertInvalidField(validWireJson().replace(
-            "\"encrypted_key\":\"wrapped-1\"",
-            "\"encrypted_key\":\"wrapped-1\",\"unknown\":\"x\""));
+            "\"encrypted_key\":\"d3JhcHBlZA\"",
+            "\"encrypted_key\":\"d3JhcHBlZA\",\"unknown\":\"x\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenKidFieldUnknown() {
         assertInvalidField(validWireJson().replace(
-            "\"mlkem768\":\"kid-pq\"",
-            "\"mlkem768\":\"kid-pq\",\"unknown\":\"x\""));
+            "\"mlkem768\":\"a2lkcHE\"",
+            "\"mlkem768\":\"a2lkcHE\",\"unknown\":\"x\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenRidIsNull() {
-        assertInvalidField(validWireJson().replace("\"rid\":\"rid-1\"", "\"rid\":null"));
+        assertInvalidField(validWireJson().replace("\"rid\":\"cmlkMQ\"", "\"rid\":null"));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenRidIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"rid\":\"rid-1\"", "\"rid\":\"ab+\""));
+        assertInvalidField(validWireJson().replace("\"rid\":\"cmlkMQ\"", "\"rid\":\"ab+\""));
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenRidBase64UrlLengthMod4IsOne() {
+        assertInvalidField(validWireJson().replace("\"rid\":\"cmlkMQ\"", "\"rid\":\"abcde\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenEkIsNull() {
-        assertInvalidField(validWireJson().replace("\"ek\":\"ek-1\"", "\"ek\":null"));
+        assertInvalidField(validWireJson().replace("\"ek\":\"ZWsx\"", "\"ek\":null"));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenEkIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"ek\":\"ek-1\"", "\"ek\":\"a/b\""));
+        assertInvalidField(validWireJson().replace("\"ek\":\"ZWsx\"", "\"ek\":\"a/b\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenEncryptedKeyIsNull() {
-        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"wrapped-1\"", "\"encrypted_key\":null"));
+        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"d3JhcHBlZA\"", "\"encrypted_key\":null"));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenEncryptedKeyMissing() {
         assertInvalidField("""
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[
                 {
                   "kid":{
-                    "x25519":"kid-ecc",
-                    "mlkem768":"kid-pq"
+                    "x25519":"a2lkZWNj",
+                    "mlkem768":"a2lkcHE"
                   },
-                  "rid":"rid-1",
-                  "ek":"ek-1"
+                  "rid":"cmlkMQ",
+                  "ek":"ZWsx"
                 }
               ],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """);
     }
 
     @Test
     void shouldThrowInvalidFieldWhenEncryptedKeyTypeWrong() {
-        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"wrapped-1\"", "\"encrypted_key\":123"));
+        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"d3JhcHBlZA\"", "\"encrypted_key\":123"));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenEncryptedKeyIsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"wrapped-1\"", "\"encrypted_key\":\"a/b\""));
+        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"d3JhcHBlZA\"", "\"encrypted_key\":\"a/b\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenKidIsNull() {
         assertInvalidField("""
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[
                 {
                   "kid":null,
-                  "rid":"rid-1",
-                  "ek":"ek-1",
-                  "encrypted_key":"wrapped-1"
+                  "rid":"cmlkMQ",
+                  "ek":"ZWsx",
+                  "encrypted_key":"d3JhcHBlZA"
                 }
               ],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """);
     }
 
     @Test
     void shouldThrowInvalidFieldWhenKidX25519IsNull() {
-        assertInvalidField(validWireJson().replace("\"x25519\":\"kid-ecc\"", "\"x25519\":null"));
+        assertInvalidField(validWireJson().replace("\"x25519\":\"a2lkZWNj\"", "\"x25519\":null"));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenKidX25519IsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"x25519\":\"kid-ecc\"", "\"x25519\":\"kid=\""));
+        assertInvalidField(validWireJson().replace("\"x25519\":\"a2lkZWNj\"", "\"x25519\":\"kid=\""));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenKidMlkem768IsNull() {
-        assertInvalidField(validWireJson().replace("\"mlkem768\":\"kid-pq\"", "\"mlkem768\":null"));
+        assertInvalidField(validWireJson().replace("\"mlkem768\":\"a2lkcHE\"", "\"mlkem768\":null"));
     }
 
     @Test
     void shouldThrowInvalidFieldWhenKidMlkem768IsNotBase64Url() {
-        assertInvalidField(validWireJson().replace("\"mlkem768\":\"kid-pq\"", "\"mlkem768\":\"kid pq\""));
+        assertInvalidField(validWireJson().replace("\"mlkem768\":\"a2lkcHE\"", "\"mlkem768\":\"kid pq\""));
     }
 
     @Test
     void shouldThrowMalformedWireWhenTopLevelFieldDuplicated() {
         assertMalformed("""
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "aad":"aad-dup",
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """);
     }
@@ -271,17 +281,17 @@ class OuterWireParserTest {
     void shouldThrowMalformedWireWhenRecipientFieldDuplicated() {
         assertMalformed("""
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[
                 {
-                  "rid":"rid-1",
+                  "rid":"cmlkMQ",
                   "rid":"rid-2"
                 }
               ],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """);
     }
@@ -290,8 +300,8 @@ class OuterWireParserTest {
     void shouldThrowMalformedWireWhenKidFieldDuplicated() {
         assertMalformed("""
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[
                 {
                   "kid":{
@@ -300,9 +310,9 @@ class OuterWireParserTest {
                   }
                 }
               ],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """);
     }
@@ -313,13 +323,13 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(injectedMapper);
         String duplicateOuter = """
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "aad":"aad-dup",
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """;
 
@@ -336,7 +346,7 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(injectedMapper);
 
         ProtocolException ex = assertThrows(ProtocolException.class, () ->
-            injectedParser.parse(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"tag-b64\",\"extra\":\"x\"")));
+            injectedParser.parse(validWireJson().replace("\"tag\":\"dGFn\"", "\"tag\":\"dGFn\",\"extra\":\"x\"")));
         assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
     }
 
@@ -344,10 +354,10 @@ class OuterWireParserTest {
     void shouldRejectSingleQuotesWhenLenientObjectMapperInjected() throws Exception {
         ObjectMapper lenientMapper = newLenientMapper();
         OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
-        String singleQuotesJson = "{'protected':'p-b64','aad':'aad-b64','recipients':[],'iv':'iv-b64','ciphertext':'ct-b64','tag':'tag-b64'}";
+        String singleQuotesJson = "{'protected':'cA','aad':'YWE','recipients':[],'iv':'aXY','ciphertext':'Y3Q','tag':'dGFn'}";
 
         JsonNode lenientNode = lenientMapper.readTree(singleQuotesJson);
-        assertEquals("aad-b64", lenientNode.get("aad").textValue());
+        assertEquals("YWE", lenientNode.get("aad").textValue());
         assertMalformedWithParser(injectedParser, singleQuotesJson);
     }
 
@@ -357,13 +367,13 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
         String commentJson = """
             {
-              "protected":"p-b64",
+              "protected":"cA",
               // comment
-              "aad":"aad-b64",
+              "aad":"YWE",
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """;
 
@@ -376,12 +386,12 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
         String trailingCommaJson = """
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64",
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn",
             }
             """;
 
@@ -394,12 +404,12 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
         String leadingPlusJson = """
             {
-              "protected":"p-b64",
+              "protected":"cA",
               "aad":+1,
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """;
 
@@ -414,12 +424,12 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
         String leadingDecimalJson = """
             {
-              "protected":"p-b64",
+              "protected":"cA",
               "aad":.5,
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """;
 
@@ -434,12 +444,12 @@ class OuterWireParserTest {
         OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
         String trailingDecimalJson = """
             {
-              "protected":"p-b64",
+              "protected":"cA",
               "aad":1.,
               "recipients":[],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """;
 
@@ -477,23 +487,24 @@ class OuterWireParserTest {
     private static String validWireJson() {
         return """
             {
-              "protected":"p-b64",
-              "aad":"aad-b64",
+              "protected":"cA",
+              "aad":"YWE",
               "recipients":[
                 {
                   "kid":{
-                    "x25519":"kid-ecc",
-                    "mlkem768":"kid-pq"
+                    "x25519":"a2lkZWNj",
+                    "mlkem768":"a2lkcHE"
                   },
-                  "rid":"rid-1",
-                  "ek":"ek-1",
-                  "encrypted_key":"wrapped-1"
+                  "rid":"cmlkMQ",
+                  "ek":"ZWsx",
+                  "encrypted_key":"d3JhcHBlZA"
                 }
               ],
-              "iv":"iv-b64",
-              "ciphertext":"ct-b64",
-              "tag":"tag-b64"
+              "iv":"aXY",
+              "ciphertext":"Y3Q",
+              "tag":"dGFn"
             }
             """;
     }
 }
+
