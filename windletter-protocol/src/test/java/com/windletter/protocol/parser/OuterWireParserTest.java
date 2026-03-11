@@ -317,6 +317,66 @@ class OuterWireParserTest {
         assertMalformedWithParser(injectedParser, trailingCommaJson);
     }
 
+    @Test
+    void shouldRejectLeadingPlusNumberWhenLenientObjectMapperInjected() throws Exception {
+        ObjectMapper lenientMapper = newLenientMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
+        String leadingPlusJson = """
+            {
+              "protected":"p-b64",
+              "aad":+1,
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """;
+
+        JsonNode lenientNode = lenientMapper.readTree(leadingPlusJson);
+        assertEquals(1, lenientNode.get("aad").intValue());
+        assertMalformedWithParser(injectedParser, leadingPlusJson);
+    }
+
+    @Test
+    void shouldRejectLeadingDecimalPointNumberWhenLenientObjectMapperInjected() throws Exception {
+        ObjectMapper lenientMapper = newLenientMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
+        String leadingDecimalJson = """
+            {
+              "protected":"p-b64",
+              "aad":.5,
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """;
+
+        JsonNode lenientNode = lenientMapper.readTree(leadingDecimalJson);
+        assertEquals(0.5d, lenientNode.get("aad").doubleValue(), 0.0d);
+        assertMalformedWithParser(injectedParser, leadingDecimalJson);
+    }
+
+    @Test
+    void shouldRejectTrailingDecimalPointNumberWhenLenientObjectMapperInjected() throws Exception {
+        ObjectMapper lenientMapper = newLenientMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(lenientMapper);
+        String trailingDecimalJson = """
+            {
+              "protected":"p-b64",
+              "aad":1.,
+              "recipients":[],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """;
+
+        JsonNode lenientNode = lenientMapper.readTree(trailingDecimalJson);
+        assertEquals(1.0d, lenientNode.get("aad").doubleValue(), 0.0d);
+        assertMalformedWithParser(injectedParser, trailingDecimalJson);
+    }
+
     private void assertInvalidField(String wireJson) {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(wireJson));
         assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
@@ -337,6 +397,9 @@ class OuterWireParserTest {
         mapper.getFactory().enable(JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature());
         mapper.getFactory().enable(JsonReadFeature.ALLOW_JAVA_COMMENTS.mappedFeature());
         mapper.getFactory().enable(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature());
+        mapper.getFactory().enable(JsonReadFeature.ALLOW_LEADING_PLUS_SIGN_FOR_NUMBERS.mappedFeature());
+        mapper.getFactory().enable(JsonReadFeature.ALLOW_LEADING_DECIMAL_POINT_FOR_NUMBERS.mappedFeature());
+        mapper.getFactory().enable(JsonReadFeature.ALLOW_TRAILING_DECIMAL_POINT_FOR_NUMBERS.mappedFeature());
         return mapper;
     }
 

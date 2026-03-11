@@ -42,6 +42,9 @@ public final class ProtocolJsonMapperFactory {
         mapper.getFactory().disable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature());
         mapper.getFactory().disable(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature());
         mapper.getFactory().disable(JsonReadFeature.ALLOW_LEADING_ZEROS_FOR_NUMBERS.mappedFeature());
+        mapper.getFactory().disable(JsonReadFeature.ALLOW_LEADING_PLUS_SIGN_FOR_NUMBERS.mappedFeature());
+        mapper.getFactory().disable(JsonReadFeature.ALLOW_LEADING_DECIMAL_POINT_FOR_NUMBERS.mappedFeature());
+        mapper.getFactory().disable(JsonReadFeature.ALLOW_TRAILING_DECIMAL_POINT_FOR_NUMBERS.mappedFeature());
         mapper.getFactory().disable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
         mapper.getFactory().disable(JsonReadFeature.ALLOW_MISSING_VALUES.mappedFeature());
         return mapper;
