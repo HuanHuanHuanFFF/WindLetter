@@ -112,6 +112,34 @@ class OuterWireParserTest {
     }
 
     @Test
+    void shouldThrowInvalidFieldWhenEncryptedKeyMissing() {
+        assertInvalidField("""
+            {
+              "protected":"p-b64",
+              "aad":"aad-b64",
+              "recipients":[
+                {
+                  "kid":{
+                    "x25519":"kid-ecc",
+                    "mlkem768":"kid-pq"
+                  },
+                  "rid":"rid-1",
+                  "ek":"ek-1"
+                }
+              ],
+              "iv":"iv-b64",
+              "ciphertext":"ct-b64",
+              "tag":"tag-b64"
+            }
+            """);
+    }
+
+    @Test
+    void shouldThrowInvalidFieldWhenEncryptedKeyTypeWrong() {
+        assertInvalidField(validWireJson().replace("\"encrypted_key\":\"wrapped-1\"", "\"encrypted_key\":123"));
+    }
+
+    @Test
     void shouldThrowInvalidFieldWhenKidIsNull() {
         assertInvalidField("""
             {
@@ -218,6 +246,16 @@ class OuterWireParserTest {
 
         JsonNode node = injectedMapper.readTree(duplicateOuter);
         assertEquals("aad-dup", node.get("aad").textValue());
+    }
+
+    @Test
+    void shouldRejectUnknownFieldWhenObjectMapperInjected() {
+        ObjectMapper injectedMapper = new ObjectMapper();
+        OuterWireParser injectedParser = new JacksonOuterWireParser(injectedMapper);
+
+        ProtocolException ex = assertThrows(ProtocolException.class, () ->
+            injectedParser.parse(validWireJson().replace("\"tag\":\"tag-b64\"", "\"tag\":\"tag-b64\",\"extra\":\"x\"")));
+        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
     }
 
     private void assertInvalidField(String wireJson) {

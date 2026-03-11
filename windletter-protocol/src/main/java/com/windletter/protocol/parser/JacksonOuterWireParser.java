@@ -86,7 +86,7 @@ public final class JacksonOuterWireParser implements OuterWireParser {
             KidRef kid = parseKid(recipient.get("kid"), i);
             String rid = readOptionalString(recipient, "rid", "recipients[" + i + "].rid");
             String ek = readOptionalString(recipient, "ek", "recipients[" + i + "].ek");
-            String encryptedKey = readOptionalString(recipient, "encrypted_key", "recipients[" + i + "].encrypted_key");
+            String encryptedKey = requireStringField(recipient, "encrypted_key", "recipients[" + i + "].encrypted_key");
             recipients.add(new RecipientEntry(kid, rid, ek, encryptedKey));
         }
         return recipients;
@@ -117,6 +117,14 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         return node.textValue();
     }
 
+    private String requireStringField(ObjectNode parent, String field, String fieldPath) {
+        JsonNode node = requireField(parent, field, fieldPath);
+        if (!node.isTextual()) {
+            throw invalidField("field '" + fieldPath + "' must be a string");
+        }
+        return node.textValue();
+    }
+
     private ArrayNode requireArrayField(ObjectNode root, String field) {
         JsonNode node = requireField(root, field);
         if (!node.isArray()) {
@@ -130,6 +138,13 @@ public final class JacksonOuterWireParser implements OuterWireParser {
             throw invalidField("missing required field '" + field + "'");
         }
         return root.get(field);
+    }
+
+    private JsonNode requireField(ObjectNode parent, String field, String fieldPath) {
+        if (!parent.has(field)) {
+            throw invalidField("missing required field '" + fieldPath + "'");
+        }
+        return parent.get(field);
     }
 
     private String readOptionalString(ObjectNode parent, String field, String fieldPath) {
