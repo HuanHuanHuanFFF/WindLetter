@@ -2,10 +2,8 @@ package com.windletter.protocol.parser;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.windletter.protocol.wire.OuterData;
-import com.windletter.protocol.wire.OuterShell;
-import com.windletter.protocol.wire.ProtectedCore;
 import com.windletter.protocol.wire.ProtectedHeader;
+import com.windletter.protocol.wire.WindLetter;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
@@ -41,12 +39,15 @@ public final class JacksonOuterWireParser implements OuterWireParser {
     }
 
     @Override
-    public OuterData parse(String wireJson) {
+    public WindLetter parse(String wireJson) {
         if (wireJson == null || wireJson.isBlank()) {
             throw ParserSupport.malformed("wireJson must be valid JSON");
         }
 
         JsonNode outerNode = ParserSupport.parseJsonObject(mapper, wireJson, "outer json");
+        precheckTopLevelStructureAndSyntax(outerNode);
+        precheckTopLevelBase64Syntax(outerNode);
+
         String protectedValue = ParserSupport.requireText(outerNode, "protected", "outer");
         byte[] protectedBytes = ParserSupport.decodeBase64UrlStrict(protectedValue, "outer.protected");
         JsonNode protectedNode = ParserSupport.parseJsonObject(
@@ -54,9 +55,12 @@ public final class JacksonOuterWireParser implements OuterWireParser {
                 new String(protectedBytes, StandardCharsets.UTF_8),
                 "outer.protected"
         );
+        precheckProtectedStructureAndSyntax(protectedNode);
 
-        precheckTopLevelStructureAndSyntax(outerNode);
-        ProtectedCore core = parseCoreByPriority(protectedNode);
+        validateCoreByPriority(protectedNode);
+
+        ParserSupport.assertKnownFields(outerNode, OUTER_FIELDS, "outer");
+        ParserSupport.assertKnownFields(protectedNode, PROTECTED_FIELDS, "outer.protected");
 
         String aad = ParserSupport.requireText(outerNode, "aad", "outer");
         ParserSupport.decodeBase64UrlStrict(aad, "outer.aad");
@@ -74,89 +78,126 @@ public final class JacksonOuterWireParser implements OuterWireParser {
                 "outer.tag"
         );
         ParserSupport.requireLength(tag, ParserSupport.LEN_GCM_TAG, "outer.tag");
+
         JsonNode recipientsNode = ParserSupport.requireArrayField(outerNode, "recipients", "outer");
         if (recipientsNode.isEmpty()) {
             throw ParserSupport.invalidField("outer.recipients must not be empty");
         }
 
-        BranchParseResult branchResult = ParserSupport.MODE_PUBLIC.equals(core.windMode())
-                ? publicBranchParser.parse(core, protectedNode, recipientsNode)
-                : obfuscationBranchParser.parse(core, protectedNode, recipientsNode);
+        String typ = ParserSupport.requireText(protectedNode, "typ", "outer.protected");
+        String cty = ParserSupport.requireText(protectedNode, "cty", "outer.protected");
+        String ver = ParserSupport.requireText(protectedNode, "ver", "outer.protected");
+        String windMode = ParserSupport.requireText(protectedNode, "wind_mode", "outer.protected");
+        String enc = ParserSupport.requireText(protectedNode, "enc", "outer.protected");
+        String keyAlg = ParserSupport.requireText(protectedNode, "key_alg", "outer.protected");
 
-        ParserSupport.assertKnownFields(outerNode, OUTER_FIELDS, "outer");
-        ParserSupport.assertKnownFields(protectedNode, PROTECTED_FIELDS, "outer.protected");
+        validateCoreWhitelist(typ, cty, windMode);
 
-        return new OuterData(
-                new OuterShell(protectedValue, aad, iv, ciphertext, tag),
-                new ProtectedHeader(core, branchResult.senderInfo()),
-                branchResult.recipients()
-        );
+        BranchParseResult branchResult = parseBranch(windMode, keyAlg, protectedNode, recipientsNode);
+        ProtectedHeader protectedHeader = new ProtectedHeader(typ, cty, ver, windMode, enc, keyAlg, branchResult.senderInfo());
+        return new WindLetter(protectedHeader, protectedValue, aad, branchResult.recipients(), iv, ciphertext, tag);
     }
 
-    private static ProtectedCore parseCoreByPriority(JsonNode protectedNode) {
-        String ver = ParserSupport.requireText(protectedNode, "ver", "outer.protected");
-        if (!"1.0".equals(ver)) {
+    private BranchParseResult parseBranch(String windMode, String keyAlg, JsonNode protectedNode, JsonNode recipientsNode) {
+        if (ParserSupport.MODE_PUBLIC.equals(windMode)) {
+            return publicBranchParser.parse(keyAlg, protectedNode, recipientsNode);
+        }
+        if (ParserSupport.MODE_OBFUSCATION.equals(windMode)) {
+            return obfuscationBranchParser.parse(keyAlg, protectedNode, recipientsNode);
+        }
+        throw ParserSupport.internalError("unreachable wind_mode dispatch: " + windMode);
+    }
+
+    private static void validateCoreByPriority(JsonNode protectedNode) {
+        String ver = ParserSupport.optionalTextRaw(protectedNode, "ver", "outer.protected");
+        if (ver != null && !ver.isBlank() && !"1.0".equals(ver)) {
             throw ParserSupport.unsupportedVersion("unsupported outer.protected.ver: " + ver);
         }
-        String enc = ParserSupport.requireText(protectedNode, "enc", "outer.protected");
-        if (!ParserSupport.ENC_A256GCM.equals(enc)) {
-            throw ParserSupport.unsupportedAlgorithm("unsupported outer.protected.enc: " + enc);
-        }
-        String keyAlg = ParserSupport.requireText(protectedNode, "key_alg", "outer.protected");
-        if (!ParserSupport.ALG_X25519.equals(keyAlg) && !ParserSupport.ALG_HYBRID.equals(keyAlg)) {
-            throw ParserSupport.unsupportedAlgorithm("unsupported outer.protected.key_alg: " + keyAlg);
-        }
-        ProtectedCore core = new ProtectedCore(
-                ParserSupport.requireText(protectedNode, "typ", "outer.protected"),
-                ParserSupport.requireText(protectedNode, "cty", "outer.protected"),
-                ver,
-                ParserSupport.requireText(protectedNode, "wind_mode", "outer.protected"),
-                enc,
-                keyAlg
-        );
-        validateRemainingCoreFields(core);
-        return core;
-    }
 
-    private static void validateRemainingCoreFields(ProtectedCore core) {
-        if (!ParserSupport.TYP_WIND_JWE.equals(core.typ())) {
+        if ("1.0".equals(ver)) {
+            String enc = ParserSupport.optionalTextRaw(protectedNode, "enc", "outer.protected");
+            if (enc != null && !enc.isBlank() && !ParserSupport.ENC_A256GCM.equals(enc)) {
+                throw ParserSupport.unsupportedAlgorithm("unsupported outer.protected.enc: " + enc);
+            }
+
+            String keyAlg = ParserSupport.optionalTextRaw(protectedNode, "key_alg", "outer.protected");
+            if (keyAlg != null && !keyAlg.isBlank()
+                    && !ParserSupport.ALG_X25519.equals(keyAlg)
+                    && !ParserSupport.ALG_HYBRID.equals(keyAlg)) {
+                throw ParserSupport.unsupportedAlgorithm("unsupported outer.protected.key_alg: " + keyAlg);
+            }
+        }
+
+        String typ = ParserSupport.optionalTextRaw(protectedNode, "typ", "outer.protected");
+        if (typ != null && !typ.isBlank() && !ParserSupport.TYP_WIND_JWE.equals(typ)) {
             throw ParserSupport.invalidField("outer.protected.typ must be wind+jwe");
         }
-        if (!ParserSupport.CTY_WIND_JWS.equals(core.cty()) && !ParserSupport.CTY_WIND_INNER.equals(core.cty())) {
+
+        String cty = ParserSupport.optionalTextRaw(protectedNode, "cty", "outer.protected");
+        if (cty != null && !cty.isBlank()
+                && !ParserSupport.CTY_WIND_JWS.equals(cty)
+                && !ParserSupport.CTY_WIND_INNER.equals(cty)) {
             throw ParserSupport.invalidField("outer.protected.cty must be wind+jws or wind+inner");
         }
-        if (!ParserSupport.MODE_PUBLIC.equals(core.windMode()) && !ParserSupport.MODE_OBFUSCATION.equals(core.windMode())) {
+
+        String windMode = ParserSupport.optionalTextRaw(protectedNode, "wind_mode", "outer.protected");
+        if (windMode != null && !windMode.isBlank()
+                && !ParserSupport.MODE_PUBLIC.equals(windMode)
+                && !ParserSupport.MODE_OBFUSCATION.equals(windMode)) {
+            throw ParserSupport.invalidField("outer.protected.wind_mode must be public or obfuscation");
+        }
+    }
+
+    private static void validateCoreWhitelist(String typ, String cty, String windMode) {
+        if (!ParserSupport.TYP_WIND_JWE.equals(typ)) {
+            throw ParserSupport.invalidField("outer.protected.typ must be wind+jwe");
+        }
+        if (!ParserSupport.CTY_WIND_JWS.equals(cty) && !ParserSupport.CTY_WIND_INNER.equals(cty)) {
+            throw ParserSupport.invalidField("outer.protected.cty must be wind+jws or wind+inner");
+        }
+        if (!ParserSupport.MODE_PUBLIC.equals(windMode) && !ParserSupport.MODE_OBFUSCATION.equals(windMode)) {
             throw ParserSupport.invalidField("outer.protected.wind_mode must be public or obfuscation");
         }
     }
 
     private static void precheckTopLevelStructureAndSyntax(JsonNode outerNode) {
-        precheckOptionalArrayShape(outerNode, "recipients", "outer");
-        precheckOptionalBase64TextField(outerNode, "aad", "outer.aad");
-        precheckOptionalBase64TextField(outerNode, "iv", "outer.iv");
-        precheckOptionalBase64TextField(outerNode, "ciphertext", "outer.ciphertext");
-        precheckOptionalBase64TextField(outerNode, "tag", "outer.tag");
+        ParserSupport.precheckOptionalTextShape(outerNode, "protected", "outer.protected");
+        ParserSupport.precheckOptionalTextShape(outerNode, "aad", "outer.aad");
+        ParserSupport.precheckOptionalArrayShape(outerNode, "recipients", "outer.recipients");
+        ParserSupport.precheckOptionalTextShape(outerNode, "iv", "outer.iv");
+        ParserSupport.precheckOptionalTextShape(outerNode, "ciphertext", "outer.ciphertext");
+        ParserSupport.precheckOptionalTextShape(outerNode, "tag", "outer.tag");
     }
 
-    private static void precheckOptionalArrayShape(JsonNode parent, String fieldName, String fieldPath) {
-        JsonNode node = parent.get(fieldName);
-        if (node != null && !node.isArray()) {
-            throw ParserSupport.malformed(fieldPath + " must be a JSON array");
-        }
+    private static void precheckTopLevelBase64Syntax(JsonNode outerNode) {
+        ParserSupport.precheckOptionalBase64TextField(outerNode, "protected", "outer.protected");
+        ParserSupport.precheckOptionalBase64TextField(outerNode, "aad", "outer.aad");
+        ParserSupport.precheckOptionalBase64TextField(outerNode, "iv", "outer.iv");
+        ParserSupport.precheckOptionalBase64TextField(outerNode, "ciphertext", "outer.ciphertext");
+        ParserSupport.precheckOptionalBase64TextField(outerNode, "tag", "outer.tag");
     }
 
-    private static void precheckOptionalBase64TextField(JsonNode parent, String fieldName, String fieldPath) {
-        JsonNode node = parent.get(fieldName);
-        if (node == null) {
-            return;
+    private static void precheckProtectedStructureAndSyntax(JsonNode protectedNode) {
+        ParserSupport.precheckOptionalTextShape(protectedNode, "typ", "outer.protected.typ");
+        ParserSupport.precheckOptionalTextShape(protectedNode, "cty", "outer.protected.cty");
+        ParserSupport.precheckOptionalTextShape(protectedNode, "ver", "outer.protected.ver");
+        ParserSupport.precheckOptionalTextShape(protectedNode, "wind_mode", "outer.protected.wind_mode");
+        ParserSupport.precheckOptionalTextShape(protectedNode, "enc", "outer.protected.enc");
+        ParserSupport.precheckOptionalTextShape(protectedNode, "key_alg", "outer.protected.key_alg");
+        ParserSupport.precheckOptionalObjectShape(protectedNode, "kid", "outer.protected.kid");
+        ParserSupport.precheckOptionalObjectShape(protectedNode, "epk", "outer.protected.epk");
+
+        JsonNode kidNode = protectedNode.get("kid");
+        if (kidNode != null) {
+            ParserSupport.precheckOptionalTextShape(kidNode, "x25519", "outer.protected.kid.x25519");
+            ParserSupport.precheckOptionalTextShape(kidNode, "mlkem768", "outer.protected.kid.mlkem768");
         }
-        if (!node.isTextual()) {
-            throw ParserSupport.malformed(fieldPath + " must be a JSON string");
+
+        JsonNode epkNode = protectedNode.get("epk");
+        if (epkNode != null) {
+            ParserSupport.precheckOptionalTextShape(epkNode, "kty", "outer.protected.epk.kty");
+            ParserSupport.precheckOptionalTextShape(epkNode, "crv", "outer.protected.epk.crv");
+            ParserSupport.precheckOptionalTextShape(epkNode, "x", "outer.protected.epk.x");
         }
-        String text = node.asText();
-        if (text.isBlank()) {
-            return;
-        }
-        ParserSupport.decodeBase64UrlStrict(text, fieldPath);
     }
 }

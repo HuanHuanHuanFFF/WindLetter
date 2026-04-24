@@ -1,6 +1,6 @@
 package com.windletter.protocol.parser;
 
-import com.windletter.protocol.wire.OuterData;
+import com.windletter.protocol.wire.WindLetter;
 
 /**
  * Outer wire parser entry point.
@@ -13,5 +13,5 @@ public interface OuterWireParser {
      * @param wireJson outer wire JSON string
      * @return parsed branch-specific outer message
      */
-    OuterData parse(String wireJson);
+    WindLetter parse(String wireJson);
 }

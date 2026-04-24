@@ -1,13 +1,25 @@
 package com.windletter.protocol.wire;
 
 /**
- * Protected header aggregate: stable core plus mode-specific sender info.
+ * Parsed protected header.
  */
-public record ProtectedHeader(ProtectedCore core, SenderInfo senderInfo) {
+public record ProtectedHeader(
+        String typ,
+        String cty,
+        String ver,
+        String windMode,
+        String enc,
+        String keyAlg,
+        SenderInfo senderInfo
+) {
 
     public ProtectedHeader {
-        core = WireChecks.requireNonNull(core, "core");
+        typ = WireChecks.requireNonBlank(typ, "typ");
+        cty = WireChecks.requireNonBlank(cty, "cty");
+        ver = WireChecks.requireNonBlank(ver, "ver");
+        windMode = WireChecks.requireNonBlank(windMode, "windMode");
+        enc = WireChecks.requireNonBlank(enc, "enc");
+        keyAlg = WireChecks.requireNonBlank(keyAlg, "keyAlg");
         senderInfo = WireChecks.requireNonNull(senderInfo, "senderInfo");
     }
 }
-

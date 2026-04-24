@@ -6,12 +6,12 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.windletter.core.error.ErrorCode;
 import com.windletter.protocol.ProtocolException;
+import com.windletter.protocol.wire.Epk;
 import com.windletter.protocol.wire.ObfuscationRecipient;
-import com.windletter.protocol.wire.ObfuscationSenderInfo;
-import com.windletter.protocol.wire.OuterData;
 import com.windletter.protocol.wire.PublicRecipient;
-import com.windletter.protocol.wire.PublicSenderInfo;
 import com.windletter.protocol.wire.RecipientEntry;
+import com.windletter.protocol.wire.SenderKid;
+import com.windletter.protocol.wire.WindLetter;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -31,19 +31,19 @@ class OuterWireParserTest {
 
     @Test
     void parsePublicX25519() {
-        OuterData parsed = parser.parse(toJson(validOuter("public", "X25519", "wind+jws")));
-        assertEquals("public", parsed.header().core().windMode());
-        assertEquals("X25519", parsed.header().core().keyAlg());
-        assertInstanceOf(PublicSenderInfo.class, parsed.header().senderInfo());
+        WindLetter parsed = parser.parse(toJson(validOuter("public", "X25519", "wind+jws")));
+        assertEquals("public", parsed.protectedHeader().windMode());
+        assertEquals("X25519", parsed.protectedHeader().keyAlg());
+        assertInstanceOf(SenderKid.class, parsed.protectedHeader().senderInfo());
         assertInstanceOf(PublicRecipient.class, parsed.recipients().get(0));
     }
 
     @Test
     void parsePublicHybrid() {
-        OuterData parsed = parser.parse(toJson(validOuter("public", "X25519ML-KEM-768", "wind+inner")));
-        assertEquals("public", parsed.header().core().windMode());
-        assertEquals("X25519ML-KEM-768", parsed.header().core().keyAlg());
-        assertInstanceOf(PublicSenderInfo.class, parsed.header().senderInfo());
+        WindLetter parsed = parser.parse(toJson(validOuter("public", "X25519ML-KEM-768", "wind+inner")));
+        assertEquals("public", parsed.protectedHeader().windMode());
+        assertEquals("X25519ML-KEM-768", parsed.protectedHeader().keyAlg());
+        assertInstanceOf(SenderKid.class, parsed.protectedHeader().senderInfo());
         RecipientEntry recipient = parsed.recipients().get(0);
         PublicRecipient publicRecipient = assertInstanceOf(PublicRecipient.class, recipient);
         assertEquals(1088, publicRecipient.ek().length);
@@ -51,10 +51,10 @@ class OuterWireParserTest {
 
     @Test
     void parseObfuscationX25519() {
-        OuterData parsed = parser.parse(toJson(validOuter("obfuscation", "X25519", "wind+jws")));
-        assertEquals("obfuscation", parsed.header().core().windMode());
-        assertEquals("X25519", parsed.header().core().keyAlg());
-        assertInstanceOf(ObfuscationSenderInfo.class, parsed.header().senderInfo());
+        WindLetter parsed = parser.parse(toJson(validOuter("obfuscation", "X25519", "wind+jws")));
+        assertEquals("obfuscation", parsed.protectedHeader().windMode());
+        assertEquals("X25519", parsed.protectedHeader().keyAlg());
+        assertInstanceOf(Epk.class, parsed.protectedHeader().senderInfo());
         RecipientEntry recipient = parsed.recipients().get(0);
         ObfuscationRecipient obfuscationRecipient = assertInstanceOf(ObfuscationRecipient.class, recipient);
         assertEquals(null, obfuscationRecipient.ek());
@@ -62,10 +62,10 @@ class OuterWireParserTest {
 
     @Test
     void parseObfuscationHybrid() {
-        OuterData parsed = parser.parse(toJson(validOuter("obfuscation", "X25519ML-KEM-768", "wind+inner")));
-        assertEquals("obfuscation", parsed.header().core().windMode());
-        assertEquals("X25519ML-KEM-768", parsed.header().core().keyAlg());
-        assertInstanceOf(ObfuscationSenderInfo.class, parsed.header().senderInfo());
+        WindLetter parsed = parser.parse(toJson(validOuter("obfuscation", "X25519ML-KEM-768", "wind+inner")));
+        assertEquals("obfuscation", parsed.protectedHeader().windMode());
+        assertEquals("X25519ML-KEM-768", parsed.protectedHeader().keyAlg());
+        assertInstanceOf(Epk.class, parsed.protectedHeader().senderInfo());
         RecipientEntry recipient = parsed.recipients().get(0);
         ObfuscationRecipient obfuscationRecipient = assertInstanceOf(ObfuscationRecipient.class, recipient);
         assertEquals(1088, obfuscationRecipient.ek().length);
@@ -138,6 +138,17 @@ class OuterWireParserTest {
     }
 
     @Test
+    void malformedProtectedShapeBeatsUnsupportedVersion() {
+        ObjectNode outer = validOuter("public", "X25519", "wind+jws");
+        ObjectNode protectedHeader = decodeProtected(outer.get("protected").asText());
+        protectedHeader.put("ver", "2.0");
+        protectedHeader.putObject("typ").put("bad", "shape");
+        outer.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    @Test
     void unsupportedAlgorithmBeatsInvalidField() {
         ObjectNode outer = validOuter("public", "X25519", "wind+jws");
         ObjectNode protectedHeader = decodeProtected(outer.get("protected").asText());
@@ -178,6 +189,24 @@ class OuterWireParserTest {
     void rejectsInvalidAadUnpaddedBase64Url() {
         ObjectNode outer = validOuter("public", "X25519", "wind+jws");
         outer.put("aad", "bad==");
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    @Test
+    void malformedAadBeatsMissingProtected() {
+        ObjectNode outer = validOuter("public", "X25519", "wind+jws");
+        outer.remove("protected");
+        outer.put("aad", "bad==");
+        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
+        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    @Test
+    void malformedIvBeatsBlankProtected() {
+        ObjectNode outer = validOuter("public", "X25519", "wind+jws");
+        outer.put("protected", "");
+        outer.put("iv", "bad==");
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
         assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
     }

@@ -1,9 +1,8 @@
 package com.windletter.protocol.parser;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.windletter.protocol.wire.Epk;
 import com.windletter.protocol.wire.ObfuscationRecipient;
-import com.windletter.protocol.wire.ObfuscationSenderInfo;
-import com.windletter.protocol.wire.ProtectedCore;
 import com.windletter.protocol.wire.RecipientEntry;
 
 import java.util.ArrayList;
@@ -13,13 +12,21 @@ import java.util.Set;
 final class ObfuscationOuterBranchParser {
 
     private static final Set<String> EPK_FIELDS = Set.of("kty", "crv", "x");
-    private static final Set<String> RECIPIENT_X25519_FIELDS = Set.of("rid", "encrypted_key");
-    private static final Set<String> RECIPIENT_HYBRID_FIELDS = Set.of("rid", "ek", "encrypted_key");
+    private static final Set<String> RECIPIENT_FIELDS = Set.of("rid", "ek", "encrypted_key");
 
-    BranchParseResult parse(ProtectedCore core, JsonNode protectedNode, JsonNode recipientsNode) {
+    BranchParseResult parse(String keyAlg, JsonNode protectedNode, JsonNode recipientsNode) {
+        ParserSupport.precheckOptionalObjectShape(protectedNode, "epk", "outer.protected.epk");
+        JsonNode epkNode = protectedNode.get("epk");
+        if (epkNode != null) {
+            ParserSupport.precheckOptionalTextShape(epkNode, "kty", "outer.protected.epk.kty");
+            ParserSupport.precheckOptionalTextShape(epkNode, "crv", "outer.protected.epk.crv");
+            ParserSupport.precheckOptionalTextShape(epkNode, "x", "outer.protected.epk.x");
+            ParserSupport.precheckOptionalBase64TextField(epkNode, "x", "outer.protected.epk.x");
+            ParserSupport.assertKnownFields(epkNode, EPK_FIELDS, "outer.protected.epk");
+        }
+
         ParserSupport.requireAbsent(protectedNode, "kid", "outer.protected");
-
-        JsonNode epkNode = ParserSupport.requireObjectField(protectedNode, "epk", "outer.protected");
+        epkNode = ParserSupport.requireObjectField(protectedNode, "epk", "outer.protected");
         String kty = ParserSupport.requireText(epkNode, "kty", "outer.protected.epk");
         if (!ParserSupport.EPK_KTY_OKP.equals(kty)) {
             throw ParserSupport.invalidField("outer.protected.epk.kty must be OKP");
@@ -33,24 +40,33 @@ final class ObfuscationOuterBranchParser {
                 "outer.protected.epk.x"
         );
         ParserSupport.requireLength(epkX, ParserSupport.LEN_X25519_PUB, "outer.protected.epk.x");
-        ParserSupport.assertKnownFields(epkNode, EPK_FIELDS, "outer.protected.epk");
 
-        List<RecipientEntry> recipients = new ArrayList<>();
-        if (ParserSupport.ALG_X25519.equals(core.keyAlg())) {
-            parseX25519Recipients(recipientsNode, recipients);
+        List<RecipientEntry> recipients;
+        if (ParserSupport.ALG_X25519.equals(keyAlg)) {
+            recipients = parseX25519Recipients(recipientsNode);
+        } else if (ParserSupport.ALG_HYBRID.equals(keyAlg)) {
+            recipients = parseHybridRecipients(recipientsNode);
         } else {
-            parseHybridRecipients(recipientsNode, recipients);
+            throw ParserSupport.internalError("unreachable obfuscation key_alg dispatch: " + keyAlg);
         }
-
-        return new BranchParseResult(new ObfuscationSenderInfo(kty, crv, epkX), recipients);
+        return new BranchParseResult(new Epk(kty, crv, epkX), recipients);
     }
 
-    private void parseX25519Recipients(JsonNode recipientsNode, List<RecipientEntry> recipients) {
+    private List<RecipientEntry> parseX25519Recipients(JsonNode recipientsNode) {
+        List<RecipientEntry> recipients = new ArrayList<>();
         for (int i = 0; i < recipientsNode.size(); i++) {
             JsonNode recipientNode = recipientsNode.get(i);
             if (!recipientNode.isObject()) {
                 throw ParserSupport.malformed("outer.recipients[" + i + "] must be a JSON object");
             }
+
+            ParserSupport.precheckOptionalTextShape(recipientNode, "rid", "outer.recipients[" + i + "].rid");
+            ParserSupport.precheckOptionalTextShape(recipientNode, "encrypted_key", "outer.recipients[" + i + "].encrypted_key");
+            ParserSupport.precheckOptionalTextShape(recipientNode, "ek", "outer.recipients[" + i + "].ek");
+            ParserSupport.precheckOptionalBase64TextField(recipientNode, "rid", "outer.recipients[" + i + "].rid");
+            ParserSupport.precheckOptionalBase64TextField(recipientNode, "encrypted_key", "outer.recipients[" + i + "].encrypted_key");
+            ParserSupport.precheckOptionalBase64TextField(recipientNode, "ek", "outer.recipients[" + i + "].ek");
+            ParserSupport.assertKnownFields(recipientNode, RECIPIENT_FIELDS, "outer.recipients[" + i + "]");
 
             byte[] rid = ParserSupport.decodeBase64UrlStrict(
                     ParserSupport.requireText(recipientNode, "rid", "outer.recipients[" + i + "]"),
@@ -65,18 +81,27 @@ final class ObfuscationOuterBranchParser {
             ParserSupport.requireLength(encryptedKey, ParserSupport.LEN_A256KW_WRAPPED_CEK,
                     "outer.recipients[" + i + "].encrypted_key");
             ParserSupport.requireAbsent(recipientNode, "ek", "outer.recipients[" + i + "]");
-            ParserSupport.assertKnownFields(recipientNode, RECIPIENT_X25519_FIELDS, "outer.recipients[" + i + "]");
 
             recipients.add(new ObfuscationRecipient(rid, encryptedKey, null));
         }
+        return recipients;
     }
 
-    private void parseHybridRecipients(JsonNode recipientsNode, List<RecipientEntry> recipients) {
+    private List<RecipientEntry> parseHybridRecipients(JsonNode recipientsNode) {
+        List<RecipientEntry> recipients = new ArrayList<>();
         for (int i = 0; i < recipientsNode.size(); i++) {
             JsonNode recipientNode = recipientsNode.get(i);
             if (!recipientNode.isObject()) {
                 throw ParserSupport.malformed("outer.recipients[" + i + "] must be a JSON object");
             }
+
+            ParserSupport.precheckOptionalTextShape(recipientNode, "rid", "outer.recipients[" + i + "].rid");
+            ParserSupport.precheckOptionalTextShape(recipientNode, "encrypted_key", "outer.recipients[" + i + "].encrypted_key");
+            ParserSupport.precheckOptionalTextShape(recipientNode, "ek", "outer.recipients[" + i + "].ek");
+            ParserSupport.precheckOptionalBase64TextField(recipientNode, "rid", "outer.recipients[" + i + "].rid");
+            ParserSupport.precheckOptionalBase64TextField(recipientNode, "encrypted_key", "outer.recipients[" + i + "].encrypted_key");
+            ParserSupport.precheckOptionalBase64TextField(recipientNode, "ek", "outer.recipients[" + i + "].ek");
+            ParserSupport.assertKnownFields(recipientNode, RECIPIENT_FIELDS, "outer.recipients[" + i + "]");
 
             byte[] rid = ParserSupport.decodeBase64UrlStrict(
                     ParserSupport.requireText(recipientNode, "rid", "outer.recipients[" + i + "]"),
@@ -97,9 +122,9 @@ final class ObfuscationOuterBranchParser {
             );
             ParserSupport.requireLength(encryptedKey, ParserSupport.LEN_A256KW_WRAPPED_CEK,
                     "outer.recipients[" + i + "].encrypted_key");
-            ParserSupport.assertKnownFields(recipientNode, RECIPIENT_HYBRID_FIELDS, "outer.recipients[" + i + "]");
 
             recipients.add(new ObfuscationRecipient(rid, encryptedKey, ek));
         }
+        return recipients;
     }
 }

@@ -58,6 +58,42 @@ final class ParserSupport {
         return node;
     }
 
+    static void precheckOptionalArrayShape(JsonNode parent, String fieldName, String fieldPath) {
+        JsonNode node = parent.get(fieldName);
+        if (node != null && !node.isArray()) {
+            throw malformed(fieldPath + " must be a JSON array");
+        }
+    }
+
+    static void precheckOptionalObjectShape(JsonNode parent, String fieldName, String fieldPath) {
+        JsonNode node = parent.get(fieldName);
+        if (node != null && !node.isObject()) {
+            throw malformed(fieldPath + " must be a JSON object");
+        }
+    }
+
+    static void precheckOptionalTextShape(JsonNode parent, String fieldName, String fieldPath) {
+        JsonNode node = parent.get(fieldName);
+        if (node != null && !node.isTextual()) {
+            throw malformed(fieldPath + " must be a JSON string");
+        }
+    }
+
+    static void precheckOptionalBase64TextField(JsonNode parent, String fieldName, String fieldPath) {
+        JsonNode node = parent.get(fieldName);
+        if (node == null) {
+            return;
+        }
+        if (!node.isTextual()) {
+            throw malformed(fieldPath + " must be a JSON string");
+        }
+        String text = node.asText();
+        if (text.isBlank()) {
+            return;
+        }
+        decodeBase64UrlStrict(text, fieldPath);
+    }
+
     static JsonNode requireArrayField(JsonNode parent, String fieldName, String parentPath) {
         JsonNode node = parent.get(fieldName);
         if (node == null) {
@@ -115,6 +151,17 @@ final class ParserSupport {
         return text;
     }
 
+    static String optionalTextRaw(JsonNode parent, String fieldName, String parentPath) {
+        JsonNode value = parent.get(fieldName);
+        if (value == null) {
+            return null;
+        }
+        if (!value.isTextual()) {
+            throw malformed(parentPath + "." + fieldName + " must be a JSON string");
+        }
+        return value.asText();
+    }
+
     static byte[] decodeBase64UrlStrict(String value, String fieldPath) {
         if (value == null || value.isBlank()) {
             throw invalidField(fieldPath + " must be non-blank");
@@ -153,5 +200,9 @@ final class ParserSupport {
 
     static ProtocolException invalidField(String message) {
         return new ProtocolException(ErrorCode.INVALID_FIELD, message);
+    }
+
+    static ProtocolException internalError(String message) {
+        return new ProtocolException(ErrorCode.INTERNAL_ERROR, message);
     }
 }
