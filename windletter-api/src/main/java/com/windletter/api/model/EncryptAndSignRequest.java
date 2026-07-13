@@ -15,6 +15,7 @@ import java.util.Map;
  * @param payload business payload
  * @param recipients recipient list (non-empty)
  * @param customHeaders optional custom header extensions (placed in payload.meta.ext)
+ * @param senderEncryptionIdentity sender encryption identity reference (required)
  * @param senderSigningIdentity signing identity reference (required)
  */
 public record EncryptAndSignRequest(
@@ -24,6 +25,7 @@ public record EncryptAndSignRequest(
     Payload payload,
     List<RecipientRef> recipients,
     Map<String, Object> customHeaders,
+    SenderEncryptionIdentityRef senderEncryptionIdentity,
     SigningIdentityRef senderSigningIdentity
 ) {
 
@@ -39,6 +41,10 @@ public record EncryptAndSignRequest(
         payload = ModelChecks.requireNonNull(payload, "payload");
         recipients = ModelChecks.copyNonEmptyList(recipients, "recipients");
         customHeaders = ModelChecks.copyMap(customHeaders);
+        senderEncryptionIdentity = ModelChecks.requireNonNull(
+            senderEncryptionIdentity,
+            "senderEncryptionIdentity"
+        );
         senderSigningIdentity = ModelChecks.requireNonNull(senderSigningIdentity, "senderSigningIdentity");
     }
 }

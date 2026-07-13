@@ -23,4 +23,9 @@ class PayloadTest {
     void shouldRejectNegativeOriginalSize() {
         assertThrows(IllegalArgumentException.class, () -> new Payload("text/plain", new byte[] {1}, -1));
     }
+
+    @Test
+    void shouldRejectOriginalSizeDifferentFromDataLength() {
+        assertThrows(IllegalArgumentException.class, () -> new Payload("text/plain", new byte[] {1}, 2));
+    }
 }

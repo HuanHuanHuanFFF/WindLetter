@@ -7,14 +7,14 @@ import java.util.Optional;
 /**
  * Identity resolution interface.
  * <p>
- * Serves both sender-side (signing identity material) and receiver-side (verification public keys and sender display identity).
+ * Serves both sender-side signing leases and receiver-side identity lookups.
  */
 public interface IdentityService {
 
     /**
-     * Resolve sender-side signing identity material.
+     * Open a sender-side signing identity lease.
      */
-    Optional<SigningIdentityMaterial> resolveSigningIdentity(SigningIdentityRef signingIdentityRef);
+    Optional<SigningIdentityLease> openSigningIdentity(SigningIdentityRef signingIdentityRef);
 
     /**
      * Look up verification public key by signing kid.

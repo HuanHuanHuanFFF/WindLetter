@@ -22,8 +22,43 @@ class EncryptAndSignRequestTest {
                 new Payload("text/plain", new byte[] {1}, 1),
                 List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
                 Map.of(),
+                new SenderEncryptionIdentityRef("encryptor", null),
                 null
             )
         );
+    }
+
+    @Test
+    void shouldRequireIndependentEncryptionIdentity() {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new EncryptAndSignRequest(
+                WindMode.PUBLIC,
+                KeyAlgProfile.X25519,
+                ArmorFormat.BASE64URL,
+                new Payload("text/plain", new byte[] {1}, 1),
+                List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
+                Map.of(),
+                null,
+                new SigningIdentityRef("signer", null)
+            )
+        );
+    }
+
+    @Test
+    void shouldKeepEncryptionAndSigningIdentitiesSeparate() {
+        EncryptAndSignRequest request = new EncryptAndSignRequest(
+            WindMode.PUBLIC,
+            KeyAlgProfile.X25519,
+            ArmorFormat.BASE64URL,
+            new Payload("text/plain", new byte[] {1}, 1),
+            List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
+            Map.of(),
+            new SenderEncryptionIdentityRef("encryptor", "enc-current"),
+            new SigningIdentityRef("signer", "sig-current")
+        );
+
+        org.junit.jupiter.api.Assertions.assertEquals("encryptor", request.senderEncryptionIdentity().identityId());
+        org.junit.jupiter.api.Assertions.assertEquals("signer", request.senderSigningIdentity().identityId());
     }
 }

@@ -16,6 +16,7 @@ import java.util.Map;
  * @param payload business payload
  * @param recipients recipient list (non-empty)
  * @param customHeaders optional custom header extensions
+ * @param senderEncryptionIdentity sender encryption identity reference (required)
  */
 public record EncryptRequest(
     WindMode mode,
@@ -23,7 +24,8 @@ public record EncryptRequest(
     ArmorFormat armorFormat,
     Payload payload,
     List<RecipientRef> recipients,
-    Map<String, Object> customHeaders
+    Map<String, Object> customHeaders,
+    SenderEncryptionIdentityRef senderEncryptionIdentity
 ) {
 
     /**
@@ -39,5 +41,9 @@ public record EncryptRequest(
         // Freeze immutable views to avoid later caller-side mutations affecting this request object.
         recipients = ModelChecks.copyNonEmptyList(recipients, "recipients");
         customHeaders = ModelChecks.copyMap(customHeaders);
+        senderEncryptionIdentity = ModelChecks.requireNonNull(
+            senderEncryptionIdentity,
+            "senderEncryptionIdentity"
+        );
     }
 }
