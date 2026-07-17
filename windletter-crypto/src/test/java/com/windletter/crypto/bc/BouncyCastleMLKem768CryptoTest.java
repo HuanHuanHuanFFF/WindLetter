@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -34,24 +35,36 @@ class BouncyCastleMLKem768CryptoTest {
 
     @Test
     void shouldEncapsulateAndDecapsulate() {
-        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey()) {
-            MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey());
+        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey();
+             MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey())) {
+            byte[] expectedSecret = encapsulation.sharedSecret();
             byte[] decapsulatedSecret = crypto.decapsulate(privateKey, encapsulation.ciphertext());
 
-            assertEquals(MLKem768Encapsulation.CIPHERTEXT_LEN, encapsulation.ciphertext().length);
-            assertEquals(MLKem768Encapsulation.SHARED_SECRET_LEN, encapsulation.sharedSecret().length);
-            assertArrayEquals(encapsulation.sharedSecret(), decapsulatedSecret);
+            try {
+                assertEquals(MLKem768Encapsulation.CIPHERTEXT_LEN, encapsulation.ciphertext().length);
+                assertEquals(MLKem768Encapsulation.SHARED_SECRET_LEN, expectedSecret.length);
+                assertArrayEquals(expectedSecret, decapsulatedSecret);
+            } finally {
+                Arrays.fill(expectedSecret, (byte) 0);
+                Arrays.fill(decapsulatedSecret, (byte) 0);
+            }
         }
     }
 
     @Test
     void shouldFailSharedSecretMatchWhenCiphertextTampered() {
-        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey()) {
-            MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey());
+        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey();
+             MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey())) {
             byte[] tamperedCiphertext = cloneAndFlip(encapsulation.ciphertext());
+            byte[] expectedSecret = encapsulation.sharedSecret();
             byte[] decapsulatedSecret = crypto.decapsulate(privateKey, tamperedCiphertext);
 
-            assertFalse(java.util.Arrays.equals(encapsulation.sharedSecret(), decapsulatedSecret));
+            try {
+                assertFalse(Arrays.equals(expectedSecret, decapsulatedSecret));
+            } finally {
+                Arrays.fill(expectedSecret, (byte) 0);
+                Arrays.fill(decapsulatedSecret, (byte) 0);
+            }
         }
     }
 
@@ -76,21 +89,28 @@ class BouncyCastleMLKem768CryptoTest {
         MLKEMPrivateKeyParameters privateKey = (MLKEMPrivateKeyParameters) keyPair.getPrivate();
         MLKEMPublicKeyParameters publicKey = (MLKEMPublicKeyParameters) keyPair.getPublic();
 
-        try (MLKem768PrivateKeyHandle imported = crypto.importPrivateKey(privateKey.getEncoded())) {
-            assertArrayEquals(publicKey.getEncoded(), imported.publicKey());
-
-            MLKem768Encapsulation encapsulation = crypto.encapsulate(imported.publicKey());
+        byte[] encodedPrivateKey = privateKey.getEncoded();
+        try (MLKem768PrivateKeyHandle imported = crypto.importPrivateKey(encodedPrivateKey);
+             MLKem768Encapsulation encapsulation = crypto.encapsulate(imported.publicKey())) {
+            byte[] expectedSecret = encapsulation.sharedSecret();
             byte[] decapsulated = crypto.decapsulate(imported, encapsulation.ciphertext());
 
-            assertArrayEquals(encapsulation.sharedSecret(), decapsulated);
+            try {
+                assertArrayEquals(publicKey.getEncoded(), imported.publicKey());
+                assertArrayEquals(expectedSecret, decapsulated);
+            } finally {
+                Arrays.fill(expectedSecret, (byte) 0);
+                Arrays.fill(decapsulated, (byte) 0);
+            }
+        } finally {
+            Arrays.fill(encodedPrivateKey, (byte) 0);
         }
     }
 
     @Test
     void shouldRejectClosedPrivateKeyHandle() {
-        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey()) {
-            MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey());
-
+        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey();
+             MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey())) {
             privateKey.close();
 
             assertThrows(IllegalStateException.class, privateKey::publicKey);
@@ -109,8 +129,8 @@ class BouncyCastleMLKem768CryptoTest {
     @Test
     void shouldRejectForeignPrivateKeyHandle() {
         byte[] ciphertext;
-        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey()) {
-            MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey());
+        try (MLKem768PrivateKeyHandle privateKey = crypto.generatePrivateKey();
+             MLKem768Encapsulation encapsulation = crypto.encapsulate(privateKey.publicKey())) {
             ciphertext = encapsulation.ciphertext();
         }
 
@@ -140,12 +160,20 @@ class BouncyCastleMLKem768CryptoTest {
         assertEquals(MLKem768Encapsulation.CIPHERTEXT_LEN, ciphertext.length);
         assertEquals(MLKem768Encapsulation.SHARED_SECRET_LEN, expectedSecret.length);
 
-        byte[] actualSecret;
-        try (MLKem768PrivateKeyHandle imported = crypto.importPrivateKey(privateKey)) {
-            actualSecret = crypto.decapsulate(imported, ciphertext);
-        }
+        byte[] actualSecret = null;
+        try {
+            try (MLKem768PrivateKeyHandle imported = crypto.importPrivateKey(privateKey)) {
+                actualSecret = crypto.decapsulate(imported, ciphertext);
+            }
 
-        assertArrayEquals(expectedSecret, actualSecret);
+            assertArrayEquals(expectedSecret, actualSecret);
+        } finally {
+            Arrays.fill(privateKey, (byte) 0);
+            Arrays.fill(expectedSecret, (byte) 0);
+            if (actualSecret != null) {
+                Arrays.fill(actualSecret, (byte) 0);
+            }
+        }
     }
 
     private static Properties loadProperties(String resourcePath) throws IOException {

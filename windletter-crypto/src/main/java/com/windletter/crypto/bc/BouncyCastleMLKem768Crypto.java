@@ -67,18 +67,21 @@ public final class BouncyCastleMLKem768Crypto implements MLKem768Crypto {
     public MLKem768Encapsulation encapsulate(byte[] publicKey) {
         validatePublicKey(publicKey);
         SecretWithEncapsulation kemResult = null;
+        byte[] secret = null;
+        byte[] encapsulation = null;
         try {
             MLKEMGenerator generator = new MLKEMGenerator(secureRandom);
             kemResult = generator.generateEncapsulated(
                     new MLKEMPublicKeyParameters(MLKEMParameters.ml_kem_768, publicKey));
 
-            byte[] secret = kemResult.getSecret().clone();
-            byte[] encapsulation = kemResult.getEncapsulation().clone();
-            MLKem768Encapsulation result = new MLKem768Encapsulation(encapsulation, secret);
-            return result;
+            secret = kemResult.getSecret();
+            encapsulation = kemResult.getEncapsulation();
+            return new MLKem768Encapsulation(encapsulation, secret);
         } catch (RuntimeException e) {
             throw new CryptoOperationException("failed to encapsulate with ML-KEM-768", e);
         } finally {
+            clear(secret);
+            clear(encapsulation);
             destroyQuietly(kemResult);
         }
     }
@@ -133,6 +136,12 @@ public final class BouncyCastleMLKem768Crypto implements MLKem768Crypto {
             kemResult.destroy();
         } catch (Exception ignored) {
             // Best-effort cleanup for provider-side secret holder.
+        }
+    }
+
+    private static void clear(byte[] value) {
+        if (value != null) {
+            Arrays.fill(value, (byte) 0);
         }
     }
 

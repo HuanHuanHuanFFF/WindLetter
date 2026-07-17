@@ -94,7 +94,7 @@
 - Create: `windletter-crypto/src/test/java/com/windletter/crypto/api/MLKem768EncapsulationTest.java`
 - Modify: `docs/dev/05-phase-3-public-hybrid-implementation-plan.md`（勾选步骤并记录 RED/GREEN/review/commit）
 
-- [ ] **Step 1: 写 owned-result RED**
+- [x] **Step 1: 写 owned-result RED**
 
 测试必须包含：
 
@@ -135,7 +135,7 @@ private static byte[] filled(int length, byte value) {
 }
 ```
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -145,7 +145,9 @@ mvn -q -pl windletter-crypto -am -Dtest=MLKem768EncapsulationTest -Dsurefire.fai
 
 Expected: compilation failure，原因是 `MLKem768Encapsulation` 尚未实现 `AutoCloseable.close()`。
 
-- [ ] **Step 3: 写最小 GREEN**
+2026-07-18 RED 证据：使用指定 JDK 17 执行上述测试（PowerShell 中对两个 `-D` 参数加引号），exit 1；`testCompile` 仅报告测试第 20、32、34 行找不到 `MLKem768Encapsulation.close()`，与预期一致。首次未加引号的 PowerShell 调用被 Maven 参数解析直接拒绝，未计作 RED 证据。
+
+- [x] **Step 3: 写最小 GREEN**
 
 ```java
 public record MLKem768Encapsulation(byte[] ciphertext, byte[] sharedSecret)
@@ -179,7 +181,7 @@ try {
 
 已有 BC tests 中每个 result 改为 try-with-resources，避免测试本身遗留真实 KEM secret。
 
-- [ ] **Step 4: 运行 GREEN 与 crypto 回归**
+- [x] **Step 4: 运行 GREEN 与 crypto 回归**
 
 ```powershell
 mvn -q -pl windletter-crypto -am -Dtest=MLKem768EncapsulationTest,BouncyCastleMLKem768CryptoTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -187,9 +189,24 @@ mvn -q -pl windletter-crypto -am -Dtest=MLKem768EncapsulationTest,BouncyCastleML
 
 Expected: exit 0；官方 CCTV vector、round-trip、tampered ciphertext、closed/foreign handle 测试全绿。
 
-- [ ] **Step 5: spec review、quality/security review、提交**
+2026-07-18 GREEN 证据：
+
+- 指定 JDK 17 focused 命令 exit 0：`MLKem768EncapsulationTest` 4 tests、`BouncyCastleMLKem768CryptoTest` 9 tests，共 13 tests，0 failures/errors/skipped。
+- `mvn -q -pl windletter-crypto -am test` exit 0：`windletter-crypto` 共 55 tests，0 failures/errors/skipped；官方 CCTV vector、round-trip、tampered ciphertext、closed/foreign handle 均通过。
+- `MLKem768Encapsulation` 保留长度/null 校验与构造器/accessor defensive copy；`close()` 幂等清零内部 shared secret，ciphertext 保持可用且不变。
+- `BouncyCastleMLKem768Crypto.encapsulate` 在 `finally` 清零 provider 返回的 secret/ciphertext 临时数组并 best-effort destroy provider holder；BC tests 对 encapsulation result 使用 try-with-resources，并清零显式 test-local secret。
+
+- [x] **Step 5: spec review、quality/security review、提交**
 
 检查内部 secret 确实被清零、ciphertext 未被破坏、provider 临时 secret 在异常路径也清零。
+
+2026-07-18 review 证据：
+
+- 独立 spec review：Critical 0、Important 0、Minor/P2 0，批准进入 code/security review；
+- 独立 code/security review：Critical 0、Important 0，批准最终验证与单闭环提交；
+- 主任务重新运行 focused tests 与 `windletter-crypto` 全模块，分别 exit 0；模块结果为 8 suites、55 tests、0 failures/errors/skipped；
+- 本闭环提交信息固定为 `fix(crypto): destroy ML-KEM encapsulation secrets`，实际 hash 由提交后的 `git log` 记录；
+- 非阻塞 P2 已登记到 §12：测试异常路径的 secret 副本 cleanup 范围，以及 provider 临时数组/destroy 的直接 instrumentation 覆盖。
 
 ```text
 fix(crypto): destroy ML-KEM encapsulation secrets
@@ -1052,5 +1069,7 @@ test(protocol): close public hybrid phase
 6. 进一步减少公开公钥、kid、`ek` 和 immutable string 的临时副本。
 7. Hybrid 与 X25519-only flow 的错误 helper 重复。
 8. 测试 fixture 可能重复已有 signed/unsigned authenticated-tamper 构造逻辑。
+9. `BouncyCastleMLKem768CryptoTest` 的 round-trip/tamper/import 用例在 `decapsulate()` 意外抛错时，`expectedSecret` 副本尚未进入 `finally` 清零范围；正常路径已清零，测试专用，不阻塞 Demo。
+10. `BouncyCastleMLKem768Crypto.encapsulate` 的 provider getter 临时数组与 holder destroy 已经代码审查和 BC 1.83 字节码核验，但尚无直接 instrumentation 回归测试。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。
