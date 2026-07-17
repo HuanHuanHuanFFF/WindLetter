@@ -961,3 +961,28 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
   }
 }
 ```
+
+## 开发修订
+
+### 2026-07-18：明确 ML-KEM-768 公钥 kid 派生规则
+
+开发 Public Hybrid 主链时发现：正文将 `kid` 统一描述为 32 字节的 JWK Thumbprint SHA-256，但当前没有稳定、无歧义的 ML-KEM-768 JWK 公钥表示。若不同实现自行选择 JWK 字段，可能为同一把 ML-KEM-768 公钥生成不同的 `kid`。
+
+Wind Letter v1.0 对 ML-KEM-768 公钥 `kid` 作如下修订：
+
+1. 输入必须是 FIPS 203 定义的 **1184 字节原始 ML-KEM-768 公钥** `pk_mlkem768`。
+2. 先计算原始指纹：
+
+   $$kid_{raw}=\mathrm{SHA\text{-}256}(pk_{mlkem768})$$
+
+3. wire 中的 `kid.mlkem768` 为：
+
+   $$kid.mlkem768=\mathrm{BASE64URL}(kid_{raw})$$
+
+   Base64URL 必须使用 URL-safe 字母表且不得包含 `=` padding；严格解码后的长度必须为 32 字节。
+4. SHA-256 的输入只能是上述 1184 字节原始公钥。不得先包装为 JWK、JSON、DER、PEM、SPKI，也不得添加算法名、长度或其他前后缀。
+5. Sender 必须从实际用于该收件人 ML-KEM-768 encapsulation 的公钥重新派生 `kid.mlkem768`，不得直接信任调用方提供的、不与公钥绑定的 kid。
+6. Receiver 或本地密钥存储必须从对应 ML-KEM-768 公钥重新派生并核对 kid；配置中的 kid 与公钥不一致属于本地密钥配置或 provider contract 错误，不得继续解密。
+7. 本修订只改变 ML-KEM-768 公钥 kid 的派生规则；X25519 和 Ed25519 的 JWK Thumbprint 规则保持不变。
+
+若正文中通用的“kid (指纹) = JWK Thumbprint SHA-256”描述与本节冲突，ML-KEM-768 公钥 kid 以本节为准。Wind Letter v1.0 实现不得为 `kid.mlkem768` 使用未在本协议中固定的 JWK 映射；未来若采用标准化的 ML-KEM JWK 表示，应通过新的协议版本明确迁移规则。
