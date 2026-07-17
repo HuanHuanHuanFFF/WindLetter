@@ -111,7 +111,10 @@ class UnsignedInnerCodecTest {
                         ProtocolLimits.MAX_PAYLOAD_BYTES + 1L));
         assertThrows(IllegalArgumentException.class,
                 () -> new ProtocolPayload("application/octet-stream", null, 0));
-        assertArrayEquals(new ProtocolAuthenticationStatus[]{ProtocolAuthenticationStatus.UNSIGNED},
+        assertArrayEquals(new ProtocolAuthenticationStatus[]{
+                        ProtocolAuthenticationStatus.UNSIGNED,
+                        ProtocolAuthenticationStatus.SIGNED_VALID
+                },
                 ProtocolAuthenticationStatus.values());
     }
 
