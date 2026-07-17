@@ -353,7 +353,7 @@ public final class PublicHybridKekDeriver {
 }
 ```
 
-- [ ] **Step 1: 写 combiner 固定向量 RED**
+- [x] **Step 1: 写 combiner 固定向量 RED**
 
 ```java
 @Test
@@ -384,7 +384,9 @@ private static byte[] sequence(int start, int length) {
 
 另写长度、null、HKDF null/错误长度/异常、输出 defensive copy 和 `SenderDerivation.close()` 清零测试。
 
-- [ ] **Step 2: 运行 RED**
+2026-07-18 test-first 证据：先只写 exact combiner 固定向量并观察类不存在 RED；最小 combiner GREEN 后，再扩展真实 BC 双向、完整 public API、provider contract、all-zero X25519、数组清零、borrowed handles 与 `SenderDerivation` lifecycle 测试，并在完整 API 实现前再次观察编译 RED。
+
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKekDeriverTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -392,7 +394,12 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKekDeriverTest -Dsurefire.
 
 Expected: compilation failure，原因是 Hybrid deriver 不存在。
 
-- [ ] **Step 3: 实现 combiner 和 sender/receiver**
+2026-07-18 RED 证据：
+
+- 首轮 fixed-vector RED 使用指定 JDK 17，focused Maven exit 1，唯一原因是 `PublicHybridKekDeriver` 不存在；
+- 扩展行为 RED exit 1，编译错误只来自 constructor、`deriveForSender`、`deriveForReceiver` 和 `SenderDerivation` 尚不存在，固定向量 combiner 已经 GREEN。
+
+- [x] **Step 3: 实现 combiner 和 sender/receiver**
 
 核心 combiner 必须是：
 
@@ -423,7 +430,9 @@ try {
 
 Sender 使用 try-with-resources 读取 `MLKem768Encapsulation`；Receiver 使用 matched ML-KEM handle decapsulate。双方在 finally 清零 X25519/PQ secrets，校验所有 provider 返回长度，不关闭 borrowed handles。
 
-- [ ] **Step 4: 加入真实 BC 双向测试并运行 GREEN**
+2026-07-18 GREEN 实现：新增计划规定的 constructor、sender/receiver 双向 API、package-private combiner 与 owned `SenderDerivation`。实现严格使用 `SS_ECC || SS_PQ`、固定 salt/info/L；校验所有输入和 provider output；拒绝 all-zero X25519；sender 关闭 encapsulation result；成功/失败均清零 X/PQ secrets、组合 Z、sender 临时 KEK 和 ciphertext snapshot；borrowed handles 保持可用。
+
+- [x] **Step 4: 加入真实 BC 双向测试并运行 GREEN**
 
 ```java
 try (X25519PrivateKeyHandle sender = x25519.generatePrivateKey();
@@ -446,9 +455,23 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKekDeriverTest,PublicX2551
 
 Expected: exit 0；固定向量和真实双向 KEK 一致。
 
-- [ ] **Step 5: review、提交**
+2026-07-18 GREEN 证据：
+
+- 指定 JDK 17 focused matrix exit 0：`PublicHybridKekDeriverTest` 9、`PublicX25519KekDeriverTest` 8、`BouncyCastleMLKem768CryptoTest` 9，共 26 tests，0 failures/errors/skipped；
+- `mvn -q -pl windletter-protocol -am test` exit 0：protocol 27 suites / 356 tests；连同 core/crypto 共 36 suites / 412 tests，0 failures/errors/skipped；
+- `git diff --check` 通过，Task 4 无 diff，`docs/README.md` 仍无内容 diff且不纳入提交。
+
+- [x] **Step 5: review、提交**
 
 重点检查 `SS_ECC`、`SS_PQ`、`Z`、KEK 的成功/失败清零以及 borrowed-handle ownership。
+
+2026-07-18 review/verification 证据：
+
+- 独立 spec review：Critical 0、Important 0；指出 sender closure 应字面使用 try-with-resources，已修正并复跑 9 tests 全绿；
+- 独立 code/security review：Critical 0、Important 0、Minor 0，批准最终验证与单闭环提交；
+- review 确认 provider alias/output ownership、all-zero X25519、HKDF cause、错误 output 清零、sender/receiver KEK ownership、record lifecycle 与 borrowed handles 均正确；
+- 两项非阻塞测试增强已登记到 §12，不阻塞 Demo；
+- 本闭环提交信息固定为 `feat(protocol): derive public hybrid KEKs`，实际 hash 由提交后的 `git log` 记录。
 
 ```text
 feat(protocol): derive public hybrid KEKs
@@ -1090,5 +1113,7 @@ test(protocol): close public hybrid phase
 8. 测试 fixture 可能重复已有 signed/unsigned authenticated-tamper 构造逻辑。
 9. `BouncyCastleMLKem768CryptoTest` 的 round-trip/tamper/import 用例在 `decapsulate()` 意外抛错时，`expectedSecret` 副本尚未进入 `finally` 清零范围；正常路径已清零，测试专用，不阻塞 Demo。
 10. `BouncyCastleMLKem768Crypto.encapsulate` 的 provider getter 临时数组与 holder destroy 已经代码审查和 BC 1.83 字节码核验，但尚无直接 instrumentation 回归测试。
+11. `PublicHybridKekDeriverTest` 尚未单独注入 X25519 provider 返回 null；生产实现已统一拒绝 null/错误长度并在 `finally` 清理，不是实现缺陷。
+12. `PublicHybridKekDeriverTest` 尚未通过完整 sender API 注入 HKDF 失败来直接观察 encapsulation close；生产实现的 try-with-resources 与 outer `finally` 已经代码/安全审查确认。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。
