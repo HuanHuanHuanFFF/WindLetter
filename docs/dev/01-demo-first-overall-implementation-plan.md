@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 2 已完成并封板；等待用户确认阶段 3。本文维护总体路线和阶段门禁；每个阶段开始前仍要基于当时的真实源码写一份可执行的阶段子计划。
+> 状态：阶段 2 已完成并封板；阶段 3 已获用户确认并进入开发。ML-KEM kid 协议修订与 Public Hybrid 设计已完成，当前按阶段 3 可执行计划推进。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -264,19 +264,22 @@ ProtocolSender
 
 预计主修改面：
 
-- `windletter-protocol/.../kdf/`
+- `windletter-crypto/.../api/` 与 `.../bc/` 的 ML-KEM secret lifecycle
+- `windletter-protocol/.../key/`
 - `windletter-protocol/.../recipient/`
 - public routing、Sender、Receiver
 - Hybrid wire/strict tests
 
-阶段子计划：`docs/dev/04-phase-3-public-hybrid-plan.md`
+阶段设计：`docs/dev/04-phase-3-public-hybrid-design.md`
+
+阶段实施计划：`docs/dev/05-phase-3-public-hybrid-implementation-plan.md`
 
 ### 完成判定
 
 - public 的 2 algorithm × 2 signing 共 4 个组合全部经真实 wire E2E。
 - 至少两个不同 Hybrid 收件人都能解密同一消息，且各自 entry 使用独立 `ek`。
 - Hybrid 缺少/多出条件字段、ML-KEM kid 错误、`ek` 长度错误均被拒绝。
-- decapsulation/unwrap 失败不泄露内部阶段且不返回 payload。
+- direct protocol flow 对 decapsulation/unwrap 使用相同 code、泛化 message 和 null cause，不返回 payload；未来 API facade 再统一公开错误。
 - 相关模块测试和 `mvn -q test` 通过。
 
 ## 9. 阶段 4：Obfuscation X25519、rid 与固定分桶
@@ -503,7 +506,9 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 2 已完成，`public × X25519` 的 unsigned 与 signed 两条真实多收件人链路均已封板。当前没有阻止阶段 3 规划的外部阻塞。
+阶段 2 已完成，`public × X25519` 的 unsigned 与 signed 两条真实多收件人链路均已封板。阶段 3 已获用户确认；2026-07-18 使用指定 JDK 17 重新验证全仓 44 suites、435 tests，0 failure、0 error、0 skipped。
+
+ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL(SHA-256(raw 1184-byte public key))`，不再依赖未稳定的 ML-KEM JWK 表示。阶段 3 设计已经独立复审，无开放 Critical/Important。
 
 已知但不阻塞下一阶段的问题：
 
@@ -512,4 +517,4 @@ mvn -q test
 - 阶段 2 的 signed/unsigned orchestration 重复、effective payload 上限、Java immutable string 清零边界和 API dormant invariants 等 P2 详见 `docs/dev/03-phase-2-signed-authentication-plan.md` §11。
 - `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 3 Hybrid 主链。
 
-下一步只做一件事：等待用户确认阶段 3。获确认后，先重新检查分支/HEAD/工作区、正式协议、ML-KEM crypto API 与现有 hybrid wire 校验，再创建阶段 3 子计划，范围限定为 `public × X25519ML-KEM-768 × unsigned/signed`；不同时引入 obfuscation、Armor 或 API facade。
+下一步按 `docs/dev/05-phase-3-public-hybrid-implementation-plan.md` 从 Task 1 开始：先关闭 ML-KEM encapsulation shared-secret 生命周期，再依次完成 raw-key kid、Hybrid KEK、recipient builder、paired routing、unsigned/signed flow 与完整 E2E。范围仍限定为 `public × X25519ML-KEM-768 × unsigned/signed`，不同时引入 obfuscation、Armor 或 API facade。
