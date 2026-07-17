@@ -220,7 +220,7 @@ fix(crypto): destroy ML-KEM encapsulation secrets
 - Create: `windletter-protocol/src/test/java/com/windletter/protocol/key/MLKem768KeyIdTest.java`
 - Modify: `docs/dev/05-phase-3-public-hybrid-implementation-plan.md`（勾选步骤并记录证据）
 
-- [ ] **Step 1: 写固定向量 RED**
+- [x] **Step 1: 写固定向量 RED**
 
 ```java
 @Test
@@ -246,7 +246,9 @@ void rejectsAnythingExceptRaw1184Bytes() {
 
 同时断言输出为 43 个 canonical Base64URL 字符且不含 `=`。
 
-- [ ] **Step 2: 运行 RED**
+2026-07-18 test-first 证据：新增 `MLKem768KeyIdTest`，固定锁定 1184 字节递增 raw public key 的预计算 kid；同时覆盖 null、1183/1185 字节拒绝、43 字符 canonical Base64URL、无 `=` 以及输入数组不被修改。
+
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=MLKem768KeyIdTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -254,7 +256,9 @@ mvn -q -pl windletter-protocol -am -Dtest=MLKem768KeyIdTest -Dsurefire.failIfNoS
 
 Expected: compilation failure，原因是 `MLKem768KeyId` 不存在。
 
-- [ ] **Step 3: 实现固定公式**
+2026-07-18 RED 证据：使用指定 JDK 17 执行上述命令（PowerShell 中对两个 `-D` 参数加引号），exit 1；`testCompile` 仅在测试第 21、32、33、34 行报告找不到 `MLKem768KeyId`，与预期一致。
+
+- [x] **Step 3: 实现固定公式**
 
 ```java
 public final class MLKem768KeyId {
@@ -280,7 +284,9 @@ public final class MLKem768KeyId {
 
 不得使用 JWK、JCS、DER、SPKI、算法名或长度前缀。
 
-- [ ] **Step 4: 运行 GREEN 与现有 kid 回归**
+2026-07-18 GREEN 实现：`MLKem768KeyId` 是 `public final` utility class，仅接受 1184 字节 raw public key，直接计算 `SHA-256(rawPublicKey)` 并调用现有 `Base64Url.encode`；未引入 JWK/JCS/DER/PEM/SPKI 或任何前缀，且不修改输入数组。SHA-256 不可用时抛出带 cause 的 `IllegalStateException("SHA-256 is unavailable")`。
+
+- [x] **Step 4: 运行 GREEN 与现有 kid 回归**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=MLKem768KeyIdTest,X25519KeyIdTest,Ed25519KeyIdTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -288,7 +294,20 @@ mvn -q -pl windletter-protocol -am -Dtest=MLKem768KeyIdTest,X25519KeyIdTest,Ed25
 
 Expected: exit 0，三个算法的 key-id tests 全绿。
 
-- [ ] **Step 5: review、提交**
+2026-07-18 GREEN 证据：
+
+- 指定 JDK 17 focused 命令 exit 0：`MLKem768KeyIdTest`、`X25519KeyIdTest`、`Ed25519KeyIdTest` 各 2 tests，共 6 tests，0 failures/errors/skipped。
+- `mvn -q -pl windletter-protocol -am test` exit 0：`windletter-protocol` 26 suites / 347 tests；连同 `windletter-core` 1 test、`windletter-crypto` 55 tests，共 403 tests，0 failures/errors/skipped。
+
+- [x] **Step 5: review、提交**
+
+2026-07-18 review/verification 证据：
+
+- 独立 spec review：Critical 0、Important 0、Minor/P2 0；固定向量经独立计算一致，批准进入 code/quality review；
+- 独立 code/quality/security review：Critical 0、Important 0、Minor/P2 0，批准最终验证与单闭环提交；
+- 主任务重新运行 focused key-id tests：6 tests、0 failures/errors/skipped；重新运行 protocol 及依赖模块：35 suites / 403 tests、0 failures/errors/skipped；
+- `git diff --check` 通过，Task 3 无 diff，`docs/README.md` 未产生内容 diff且不纳入提交；
+- 本闭环提交信息固定为 `feat(protocol): derive ML-KEM key identifiers`，实际 hash 由提交后的 `git log` 记录。
 
 ```text
 feat(protocol): derive ML-KEM key identifiers
