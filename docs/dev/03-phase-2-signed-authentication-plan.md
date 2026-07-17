@@ -12,7 +12,7 @@
 
 ## 0. Execution status and project constraints
 
-- Phase status: in progress.
+- Phase status: complete (2026-07-17); stopped at the phase gate awaiting user confirmation for Phase 3.
 - Branch: `spike/demo-v0`.
 - Phase baseline HEAD: `3659d6213ebbef0a8642fff97d065b12be1a4574`.
 - Baseline verification: JDK 17.0.16, `mvn -q test` exit code 0; 285 tests, 0 failures, 0 errors, 0 skipped.
@@ -24,7 +24,17 @@
   - P2 defects may be deferred;
   - every deferred P2 must be listed in the final phase report with impact and follow-up advice.
 
-### 0.1 Authority order
+### 0.1 Final closure evidence
+
+- Runtime: Microsoft OpenJDK 17.0.16.
+- Task 5 focused gate: 15 tests, 0 failures, 0 errors, 0 skipped.
+- Protocol module after Task 5: 345 tests, 0 failures, 0 errors, 0 skipped.
+- Final `mvn -q clean test`: 44 suites and 435 tests, 0 failures, 0 errors, 0 skipped.
+- Final spec review and code/security review: PASS; no unresolved P0/P1 finding.
+- Task 5 proved the existing production flow without modifying production code.
+- `docs/README.md` remained excluded as pre-existing line-ending-only worktree noise.
+
+### 0.2 Authority order
 
 1. Current source and tests describe what is implemented.
 2. `docs/Wind Letter v1.0协议.md` defines formal protocol intent.
@@ -288,12 +298,12 @@ No POM dependency change is expected.
 
 | Commit | Closed loop | Focused gate |
 |---|---|---|
-| 1 | Phase 2 executable plan | plan self-review and diff check |
-| 2 | RFC 7638 Ed25519 kid + trusted key records | key/signature model tests |
-| 3 | Strict flattened signed inner codec | `SignedInnerCodecTest` |
-| 4 | Real public/X25519 signed Sender | sender tests plus existing unsigned sender tests |
-| 5 | Trusted signed Receiver | receiver tests plus existing unsigned receiver tests |
-| 6 | Signed adversarial E2E and phase gate | full protocol and reactor tests; plan status update |
+| `42f8ac4` | Phase 2 executable plan | plan self-review and diff check |
+| `e304158` | RFC 7638 Ed25519 kid + trusted key records | key/signature model tests |
+| `7e27512` | Strict flattened signed inner codec | `SignedInnerCodecTest` |
+| `b39384a` | Real public/X25519 signed Sender | sender tests plus existing unsigned sender tests |
+| `7e7918b` | Trusted signed Receiver | receiver tests plus existing unsigned receiver tests |
+| this closure commit | Signed adversarial E2E and phase gate | 15 focused, 345 protocol, and 435 reactor tests; plan status update |
 
 No commit includes `docs/README.md`, build output, or unrelated cleanup.
 
@@ -309,7 +319,7 @@ No commit includes `docs/README.md`, build output, or unrelated cleanup.
 - Create: `windletter-protocol/src/main/java/com/windletter/protocol/model/ProtocolSenderIdentity.java`
 - Modify: `windletter-protocol/src/main/java/com/windletter/protocol/model/ProtocolAuthenticationStatus.java`
 
-- [ ] **Step 1: Write failing exact-vector and validation tests**
+- [x] **Step 1: Write failing exact-vector and validation tests**
 
 ```java
 assertEquals(
@@ -323,7 +333,7 @@ assertThrows(IllegalArgumentException.class, () -> Ed25519KeyId.derive(new byte[
 
 Trusted material tests require non-blank IDs, a canonical 32-byte kid, a 32-byte public key, and defensive copies. `ProtocolSenderIdentity` requires non-blank identity and signing kid. Enum test locks values to `UNSIGNED`, `SIGNED_VALID` without removing stage-one behavior.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=Ed25519KeyIdTest,TrustedEd25519KeyTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -331,11 +341,11 @@ mvn -q -pl windletter-protocol -am -Dtest=Ed25519KeyIdTest,TrustedEd25519KeyTest
 
 Expected: compilation/test failure because the new production types do not exist.
 
-- [ ] **Step 3: Implement the minimal records and thumbprint**
+- [x] **Step 3: Implement the minimal records and thumbprint**
 
 `Ed25519KeyId.derive` mirrors `X25519KeyId` but uses `crv="Ed25519"`. `TrustedEd25519Key` snapshots the key and validates that its signing kid is canonical Base64URL decoding to 32 bytes. The receiver, not the record constructor, performs the final key-to-kid derivation check so resolver contract failures can be mapped deliberately.
 
-- [ ] **Step 4: Run GREEN and regression**
+- [x] **Step 4: Run GREEN and regression**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=Ed25519KeyIdTest,TrustedEd25519KeyTest,UnsignedInnerCodecTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -343,7 +353,7 @@ mvn -q -pl windletter-protocol -am -Dtest=Ed25519KeyIdTest,TrustedEd25519KeyTest
 
 Expected: exit code 0.
 
-- [ ] **Step 5: Commit only this closed loop**
+- [x] **Step 5: Commit only this closed loop**
 
 ```text
 feat(protocol): add trusted Ed25519 key identity
@@ -390,7 +400,7 @@ public final class SignedInnerCodec {
 
 `Prepared` and `Decoded` return defensive array copies and clear their internal signing-input/signature arrays on close. They never own or close a crypto handle.
 
-- [ ] **Step 1: Write failing deterministic-byte tests**
+- [x] **Step 1: Write failing deterministic-byte tests**
 
 Tests hard-code the expected canonical header JSON order:
 
@@ -413,7 +423,7 @@ assertArrayEquals(
 );
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=SignedInnerCodecTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -421,11 +431,11 @@ mvn -q -pl windletter-protocol -am -Dtest=SignedInnerCodecTest -Dsurefire.failIf
 
 Expected: compilation failure because `SignedInnerCodec` does not exist.
 
-- [ ] **Step 3: Implement deterministic prepare/assemble and round-trip decode**
+- [x] **Step 3: Implement deterministic prepare/assemble and round-trip decode**
 
 Use `JcsCanonicalizer`, `Base64Url`, `StrictJson`, and `ProtocolLimits`; do not use a JOSE library. `decode` reconstructs signing input directly from the two received strings.
 
-- [ ] **Step 4: Add the strict negative matrix one group at a time**
+- [x] **Step 4: Add the strict negative matrix one group at a time**
 
 Each new group is first observed failing, then made green:
 
@@ -440,7 +450,7 @@ Each new group is first observed failing, then made green:
 - binary and zero-length payload;
 - defensive copying and idempotent close.
 
-- [ ] **Step 5: Run codec GREEN and unsigned regression**
+- [x] **Step 5: Run codec GREEN and unsigned regression**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=SignedInnerCodecTest,UnsignedInnerCodecTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -448,7 +458,7 @@ mvn -q -pl windletter-protocol -am -Dtest=SignedInnerCodecTest,UnsignedInnerCode
 
 Expected: exit code 0.
 
-- [ ] **Step 6: Commit only the codec closed loop**
+- [x] **Step 6: Commit only the codec closed loop**
 
 ```text
 feat(protocol): add strict flattened signed inner codec
@@ -478,7 +488,7 @@ public record Result(WindLetter message, String wireJson) {}
 
 Both private handles are borrowed. The flow derives the signing kid from `senderSigningPrivateKey.publicKey()` and never accepts a caller-supplied signing kid.
 
-- [ ] **Step 1: Write a failing real-crypto sender test**
+- [x] **Step 1: Write a failing real-crypto sender test**
 
 The test uses Bouncy Castle primitives, decrypts the output using the known recipient, decodes the flattened JWS, and independently verifies:
 
@@ -492,7 +502,7 @@ assertTrue(ed25519.verify(
 assertEquals(Ed25519KeyId.derive(signingHandle.publicKey()), decoded.message().signingKid());
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedSenderTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -500,7 +510,7 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedSenderTest -Dsurefir
 
 Expected: compilation failure because the signed sender does not exist.
 
-- [ ] **Step 3: Implement the sender by preserving stage-one ordering**
+- [x] **Step 3: Implement the sender by preserving stage-one ordering**
 
 ```text
 generate CEK/IV
@@ -517,7 +527,7 @@ generate CEK/IV
 
 Finally clear sender public-key snapshots, signing public-key snapshot, CEK, IV, signing input, signature, inner bytes, and GCM AAD. Do not close either borrowed handle.
 
-- [ ] **Step 4: Add request/provider/ownership tests RED then GREEN**
+- [x] **Step 4: Add request/provider/ownership tests RED then GREEN**
 
 - null and invalid request values;
 - 1..32 recipients and duplicate kid rejection inherited from the same request rules;
@@ -527,7 +537,7 @@ Finally clear sender public-key snapshots, signing public-key snapshot, CEK, IV,
 - borrowed handles remain open after success/failure;
 - every mutable temporary owned by the flow is zeroed on success/failure.
 
-- [ ] **Step 5: Run sender and stage-one sender regression**
+- [x] **Step 5: Run sender and stage-one sender regression**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedSenderTest,PublicX25519UnsignedSenderTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -535,7 +545,7 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedSenderTest,PublicX25
 
 Expected: exit code 0.
 
-- [ ] **Step 6: Commit only the sender closed loop**
+- [x] **Step 6: Commit only the sender closed loop**
 
 ```text
 feat(protocol): add public X25519 signed sender
@@ -569,7 +579,7 @@ public record Result(
 
 Successful construction requires `SIGNED_VALID` and non-null authenticated sender. There is no failure Result; failures throw `ProtocolException`, so payload/identity cannot leak through a partial object.
 
-- [ ] **Step 1: Write failing trusted-success and unknown-key tests**
+- [x] **Step 1: Write failing trusted-success and unknown-key tests**
 
 The success resolver returns:
 
@@ -583,7 +593,7 @@ new TrustedEd25519Key(
 
 Success asserts restored binary payload, message ID, timestamp, `SIGNED_VALID`, trusted identity ID, verified signing kid, and borrowed handles still open. Empty resolver must fail with `SIGNATURE_INVALID` and never return a Result.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedReceiverTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -591,11 +601,11 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedReceiverTest -Dsuref
 
 Expected: compilation failure because the signed receiver does not exist.
 
-- [ ] **Step 3: Implement the exact receiver gate order from section 2.8**
+- [x] **Step 3: Implement the exact receiver gate order from section 2.8**
 
 The resolver is not called before strict outer/AAD/routing/GCM/inner/binding gates. After resolution, snapshot the public key, check record kid equality, rederive the RFC 7638 kid, and verify the exact received signing input.
 
-- [ ] **Step 4: Add receiver error/ownership tests RED then GREEN**
+- [x] **Step 4: Add receiver error/ownership tests RED then GREEN**
 
 - unrelated recipient -> `NOT_FOR_ME` without signing resolver call;
 - unknown signing kid -> `SIGNATURE_INVALID`;
@@ -606,7 +616,7 @@ The resolver is not called before strict outer/AAD/routing/GCM/inner/binding gat
 - no borrowed X25519 handle is closed;
 - KEK, CEK, GCM AAD, decrypted inner, signing input/signature/public-key snapshots are cleared on success and every failure path.
 
-- [ ] **Step 5: Run receiver and unsigned regression**
+- [x] **Step 5: Run receiver and unsigned regression**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedReceiverTest,PublicX25519UnsignedReceiverTest,PublicKidRouterTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -614,7 +624,7 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicX25519SignedReceiverTest,PublicX
 
 Expected: exit code 0.
 
-- [ ] **Step 6: Commit only the receiver closed loop**
+- [x] **Step 6: Commit only the receiver closed loop**
 
 ```text
 feat(protocol): verify trusted Ed25519 sender identity
@@ -631,15 +641,15 @@ feat(protocol): verify trusted Ed25519 sender identity
 - Modify after all gates pass: `docs/dev/03-phase-2-signed-authentication-plan.md`
 - Modify after all gates pass: `docs/dev/01-demo-first-overall-implementation-plan.md`
 
-- [ ] **Step 1: Add three-recipient wire-only E2E**
+- [x] **Step 1: Add three-recipient wire-only E2E**
 
 For first, middle, and last recipients, pass only the same serialized JSON string, that recipient's private handle, outer sender resolver, and trusted signing resolver. Assert identical binary/empty payload recovery plus `SIGNED_VALID` and the trusted identity. An unrelated recipient remains `NOT_FOR_ME`.
 
-- [ ] **Step 2: Add authenticated binding tamper fixtures**
+- [x] **Step 2: Add authenticated binding tamper fixtures**
 
 Use deterministic known CEK/IV, construct an otherwise strict signed inner with one wrong binding, sign it with the real signing key, and perform real A256GCM re-encryption. Expected code is `BINDING_FAILED`, and the signing resolver must not be called.
 
-- [ ] **Step 3: Add authenticated signature tamper fixtures**
+- [x] **Step 3: Add authenticated signature tamper fixtures**
 
 Keep correct binding and strict inner shape, but use one of:
 
@@ -649,7 +659,7 @@ Keep correct binding and strict inner shape, but use one of:
 
 Re-encrypt with real GCM so GCM passes. Expected code is `SIGNATURE_INVALID`.
 
-- [ ] **Step 4: Add strict mismatch and failure-order cases**
+- [x] **Step 4: Add strict mismatch and failure-order cases**
 
 - signed outer plus unsigned/incorrect inner `typ`;
 - wrong `alg`;
@@ -657,7 +667,7 @@ Re-encrypt with real GCM so GCM passes. Expected code is `SIGNATURE_INVALID`.
 - bad kid/signature length;
 - outer recipient/AAD/protected/IV/ciphertext/tag mutations retain the stage-one gate ordering.
 
-- [ ] **Step 5: Run focused and module tests**
+- [x] **Step 5: Run focused and module tests**
 
 ```powershell
 mvn -q -pl windletter-protocol -am test
@@ -665,7 +675,7 @@ mvn -q -pl windletter-protocol -am test
 
 Expected: exit code 0; all stage-one unsigned and Phase 2 signed tests pass.
 
-- [ ] **Step 6: Run full JDK 17 reactor gate**
+- [x] **Step 6: Run full JDK 17 reactor gate**
 
 ```powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -676,14 +686,14 @@ git diff --check
 
 Expected: both commands exit 0, no skipped/disabled tests are introduced, and `docs/README.md` remains excluded.
 
-- [ ] **Step 7: Independent reviews**
+- [x] **Step 7: Independent reviews**
 
 - Spec review checks every requirement and exact byte formula.
 - Code/security review checks P0/P1, error-oracle boundaries, ownership, zeroization, and test authenticity.
 - Critical/Important/P0/P1 findings are fixed and re-reviewed before completion.
 - P2 findings are recorded rather than silently discarded.
 
-- [ ] **Step 8: Update phase status and commit the closure**
+- [x] **Step 8: Update phase status and commit the closure**
 
 Update this document with exact test counts, review result, commit list, and P2 debt. Mark Phase 2 complete in the overall plan only after the full gate passes.
 
@@ -693,22 +703,22 @@ test(protocol): close signed authentication phase
 
 ## 10. P0/P1 completion gate
 
-- [ ] Actual inner is strict flattened JWS, never the expanded debugging view.
-- [ ] Sender header, payload, and wrapper bytes are deterministic and locked by exact tests.
-- [ ] Receiver verifies exact received encoded segments.
-- [ ] Ed25519 kid follows the fixed RFC 7638/RFC 8037 vector.
-- [ ] `typ="wind+jws"`, `alg="EdDSA"`, exact fields, Base64URL, lengths, UUID, timestamp, and payload invariants are strict.
-- [ ] Trusted signing key is 32 bytes, record kid matches requested kid, and rederived kid matches the public key.
-- [ ] Authenticated identity originates only from the verified trusted signing-key record.
-- [ ] Binding is checked before signature resolution/verification.
-- [ ] Unknown kid, wrong key, bad signature, and mismatch never degrade to unsigned or return payload/identity.
-- [ ] Only recipient no-match is `NOT_FOR_ME`.
-- [ ] Three real recipients recover the same signed message from the same wire JSON.
-- [ ] Binding/signature targeted tests use real GCM re-encryption and reach the intended gate.
-- [ ] Borrowed X25519 and Ed25519 handles remain open; owned secret/temporary arrays are cleared best-effort.
-- [ ] Every stage-one unsigned test remains green.
-- [ ] JDK 17 full reactor test and `git diff --check` pass.
-- [ ] No unresolved P0/P1 review finding remains.
+- [x] Actual inner is strict flattened JWS, never the expanded debugging view.
+- [x] Sender header, payload, and wrapper bytes are deterministic and locked by exact tests.
+- [x] Receiver verifies exact received encoded segments.
+- [x] Ed25519 kid follows the fixed RFC 7638/RFC 8037 vector.
+- [x] `typ="wind+jws"`, `alg="EdDSA"`, exact fields, Base64URL, lengths, UUID, timestamp, and payload invariants are strict.
+- [x] Trusted signing key is 32 bytes, record kid matches requested kid, and rederived kid matches the public key.
+- [x] Authenticated identity originates only from the verified trusted signing-key record.
+- [x] Binding is checked before signature resolution/verification.
+- [x] Unknown kid, wrong key, bad signature, and mismatch never degrade to unsigned or return payload/identity.
+- [x] Only recipient no-match is `NOT_FOR_ME`.
+- [x] Three real recipients recover the same signed message from the same wire JSON.
+- [x] Binding/signature targeted tests use real GCM re-encryption and reach the intended gate.
+- [x] Borrowed X25519 and Ed25519 handles remain open; owned secret/temporary arrays are cleared best-effort.
+- [x] Every stage-one unsigned test remains green.
+- [x] JDK 17 full reactor test and `git diff --check` pass.
+- [x] No unresolved P0/P1 review finding remains.
 
 ## 11. Deferred P2 register
 
@@ -728,5 +738,13 @@ These items do not block Phase 2 unless implementation reveals a protocol/securi
    - `DecryptResult` status/payload/identity/error consistency;
    - same-principal policy across encryption and signing identities.
 10. Reassess profile-dependent effective maximum payload size caused by flattened JWS Base64 expansion under the current 12 MiB inner limit.
+11. Give `byte[]`-backed value records such as `TrustedEd25519Key` content-based `equals`/`hashCode` semantics if later code relies on value equality.
+12. Add direct tests for remaining provider/resolver contract edges and explicit cross-identity isolation; production validation exists, but some cases currently rely on adjacent regression suites.
+13. Define an explicit lifecycle if sender request objects retain recipient public-key snapshots longer than one call; the snapshots are public material, not secrets.
+14. Tighten size-limit test intent: distinguish decoded payload caps from total signed-inner caps, and directly cover the assembled-output cap.
+15. In the extremely unlikely platform-exception path inside X25519 kid derivation, clear the local sender public-key clone before propagation; this is public material and normal JDK 17 execution cannot reach the gap.
+16. Keep the deterministic Task 5 random source test-only: it deliberately reuses a known CEK/IV to construct authenticated malicious fixtures, and unconsumed cloned values are only GC-cleared if the sender exits exceptionally before requesting both values.
+17. Strengthen the unknown-signer fixture with an independent positive verification of the unrelated signature and an explicit assertion of the requested unrelated kid.
+18. Task 5 E2E relies on the dedicated Task 3/4 tracking-provider suites for exhaustive secret zeroization and borrowed-handle ownership; keep those suites paired in future refactors.
 
 Every still-open P2 item must appear in the Phase 2 completion report.

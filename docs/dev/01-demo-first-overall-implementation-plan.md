@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 1 已完成并封板；等待用户确认阶段 2。本文维护总体路线和阶段门禁；每个阶段开始前仍要基于当时的真实源码写一份可执行的阶段子计划。
+> 状态：阶段 2 已完成并封板；等待用户确认阶段 3。本文维护总体路线和阶段门禁；每个阶段开始前仍要基于当时的真实源码写一份可执行的阶段子计划。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -235,11 +235,20 @@ ProtocolSender
 
 - public/X25519/signed 真实多收件人 E2E 通过。
 - 正确签名只在可信 key 验证后返回认证身份。
-- 坏签名、未知 kid、错误长度、缺字段、outer cty/inner typ 错配均为 `INVALID_MESSAGE`。
+- 协议层对坏签名/未知 signing kid 使用 `SIGNATURE_INVALID`，对严格结构错误使用 `INVALID_FIELD`；阶段 6 的 API facade 再统一为安全的公开错误语义。
 - binding 和 signature 的定向负例必须使用“经过真实 GCM 重新加密、GCM 本身仍合法”的恶意 inner fixture，确保测试确实到达 binding/验签层。
 - signed 失败不返回 payload；unsigned 不伪造 sender identity。
 - 阶段 1 全部正负例继续通过。
 - 相关模块测试和 `mvn -q test` 通过。
+
+### 实际封板（2026-07-17）
+
+- `public × X25519 × signed × 三收件人` 已从同一个真实 JSON wire 恢复 binary 与 empty payload，并返回 `SIGNED_VALID` 和可信 Ed25519 identity。
+- Binding、signature、unknown real signing key 和 strict signed inner 负例均使用真实密码学链路；需要到达 inner gate 的用例使用真实 A256GCM 重新加密。
+- Task 5 focused gate 15/15 通过；protocol 模块 345 tests 通过。
+- Microsoft OpenJDK 17.0.16 下最终 `mvn -q clean test`：44 suites、435 tests，0 failure、0 error、0 skipped。
+- Spec review 与 code/security review 均 PASS，无未处理 P0/P1；开放 P2 记录在阶段子计划 §11。
+- 阶段 2 由 6 个独立闭环提交组成；未推送，既有 `docs/README.md` 行尾状态噪音未纳入提交。
 
 ## 8. 阶段 3：Public Hybrid 封板
 
@@ -494,12 +503,13 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 1 已完成，原有两个 P1 已关闭：obfuscation outer recipient 数量现只接受 8/16/32；API SPI 已使用 private-key lease/handle，不再返回 raw private bytes。当前没有阻止阶段 2 规划的外部阻塞。
+阶段 2 已完成，`public × X25519` 的 unsigned 与 signed 两条真实多收件人链路均已封板。当前没有阻止阶段 3 规划的外部阻塞。
 
 已知但不阻塞下一阶段的问题：
 
-- signed inner 的 `typ` 与部分展示结构仍存在文档歧义；阶段 2 必须继续采用本文冻结的 flattened JWS 与 `typ="wind+jws"`，并用 exact-byte tests 锁定。
+- 正式协议对 signed inner 的 `typ`、flattened JWS 展示结构和 receiver 侧非 JCS 接受策略仍有文档歧义；可执行 profile 已由阶段 2 exact-byte tests 冻结，正式文档清理作为 P2 后置。
 - Stage 1 保留少量 hardening：GCM AAD helper 显式 ASCII 校验、outer protected strict UTF-8 decoder、wire writer 异常分类收窄、含数组值对象的相等语义与第三方 provider 违约防御。
-- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞 signed 主链。
+- 阶段 2 的 signed/unsigned orchestration 重复、effective payload 上限、Java immutable string 清零边界和 API dormant invariants 等 P2 详见 `docs/dev/03-phase-2-signed-authentication-plan.md` §11。
+- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 3 Hybrid 主链。
 
-下一步只做一件事：等待用户确认阶段 2 的范围为 `public × X25519 × signed`。获确认后，先重新检查分支/HEAD/工作区与协议，创建 `docs/dev/03-phase-2-signed-authentication-plan.md`，再实现 strict signed inner、Ed25519 exact signing input、可信 signing-key resolver 与真实验签 E2E；不同时引入 Hybrid、obfuscation、Armor 或 API facade。
+下一步只做一件事：等待用户确认阶段 3。获确认后，先重新检查分支/HEAD/工作区、正式协议、ML-KEM crypto API 与现有 hybrid wire 校验，再创建阶段 3 子计划，范围限定为 `public × X25519ML-KEM-768 × unsigned/signed`；不同时引入 obfuscation、Armor 或 API facade。
