@@ -986,3 +986,27 @@ Wind Letter v1.0 对 ML-KEM-768 公钥 `kid` 作如下修订：
 7. 本修订只改变 ML-KEM-768 公钥 kid 的派生规则；X25519 和 Ed25519 的 JWK Thumbprint 规则保持不变。
 
 若正文中通用的“kid (指纹) = JWK Thumbprint SHA-256”描述与本节冲突，ML-KEM-768 公钥 kid 以本节为准。Wind Letter v1.0 实现不得为 `kid.mlkem768` 使用未在本协议中固定的 JWK 映射；未来若采用标准化的 ML-KEM JWK 表示，应通过新的协议版本明确迁移规则。
+
+### 2026-07-18：明确 Obfuscation X25519 构建顺序、完整扫描与失败语义
+
+开发 `obfuscation + X25519` 主链时发现：正文已经定义 `rid/ecc`、固定分桶和常量时间比较，但没有完整冻结最终收件人顺序、随机打乱、重复命中和低阶 `epk` 的处理。若实现各自选择，可能导致内外层 binding 不一致、真实条目位置泄露、路由提前返回或把无效消息错误降级为 `NotForMe`。
+
+Wind Letter v1.0 对混淆模式作如下修订：
+
+1. 每条 outer message 必须生成一把新的 X25519 临时密钥对。同一条消息的全部真实收件人共享该消息的 `protected.epk`；临时私钥不得跨消息复用。
+2. 对 `key_alg="X25519"`，每个真实收件人的派生参数固定为：
+
+   $$SS_{ECC}=\mathrm{X25519}(sk_{eph},pk_{static}^{recv})$$
+
+   $$rid=\mathrm{HKDF\text{-}SHA256}(salt=\mathrm{UTF8}("wind"),IKM=SS_{ECC},info=\mathrm{UTF8}("rid/ecc"),L=16)$$
+
+   KEK 仍按正文 §5.0(A) 使用 `info="WindLetter v1 KEK | X25519"`、`L=32` 派生。`rid` 与 KEK 必须来自同一次 X25519 共享秘密；实现不得把 `rid` 用作加密密钥。
+3. Sender 必须先构造全部真实 entry，再向上填充到最小的 `{8,16,32}` 桶。`m=0` 或 `m>32` 必须拒绝；重复真实 X25519 公钥必须拒绝。
+4. X25519 诱饵 entry 必须只含随机 16 字节 `rid` 和随机 40 字节 `encrypted_key`，不得含 `kid` 或 `ek`。最终 wire 中所有 `rid` 必须唯一；真实 entry 冲突必须拒绝，诱饵冲突必须重新采样。
+5. 真实 entry 与诱饵 entry 合并后，Sender 必须使用 CSPRNG 执行无偏 Fisher-Yates shuffle。只有最终顺序冻结后，才允许计算 `outer.aad`、`jwe_recipients_hash`、组装或签名 inner，并执行 AES-GCM。正文 §3.2 中“构建 inner”只表示准备 payload、`wind_id` 和 `ts`；包含 binding 的 inner 不得在最终 `protected` 与最终 `recipients` 之前定稿。若正文顺序与本项冲突，以本项为准。
+6. Receiver 必须拒绝重复 wire `rid`，并拒绝重复本地 X25519 公钥记录。对每个不同的本地私钥候选，必须计算候选 `rid`，并与全部 wire entry 的 16 字节 `rid` 做固定长度常量时间比较；发现命中后仍不得提前结束扫描。
+7. 若完整扫描后有多个不同本地身份命中，Receiver 必须选择 wire 顺序中最靠前的命中 entry。只允许对该 entry 执行 CEK unwrap；unwrap、后续 GCM、binding 或验签失败均为 `InvalidMessage`，不得回退尝试其它 entry。
+8. 只有在有效完成候选计算与完整扫描后仍无任何命中时，才返回 `NotForMe`。低阶或全零 `protected.epk` 导致的 X25519 失败属于 `InvalidMessage`，不得降级为 `NotForMe`。
+9. 实现必须在成功与失败路径关闭每消息临时 X25519 私钥，并清除 X25519 shared secret、候选 `rid`、KEK、CEK、inner 和 GCM AAD 等调用方拥有的敏感临时数组。
+
+本修订不改变 wire 字段或算法白名单，也不在阶段 4 引入 Obfuscation Hybrid。Hybrid 的逐 entry `ek`、`rid/hybrid` 和 1088 字节诱饵将在后续阶段按正文既有规则实现。
