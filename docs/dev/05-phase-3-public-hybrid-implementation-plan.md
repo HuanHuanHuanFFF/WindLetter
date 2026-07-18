@@ -510,7 +510,7 @@ public final class PublicHybridRecipientBuilder {
 }
 ```
 
-- [ ] **Step 1: 写真实两收件人 RED**
+- [x] **Step 1: 写真实两收件人 RED**
 
 测试生成一个 sender 和两个不同 X25519/ML-KEM recipient pairs，调用 builder 后断言：
 
@@ -527,7 +527,9 @@ assertFalse(Arrays.equals(entries.get(0).ek(), entries.get(1).ek()));
 
 另覆盖 null、0/33 recipients、32/1184 长度、重复完整 pair、defensive copy、provider 错误长度和 KEK/CEK snapshot 清零。
 
-- [ ] **Step 2: 运行 RED**
+2026-07-18 RED 测试范围：新增真实 BC 两收件人 round-trip，锁定双 kid、独立 1088-byte `ek`、40-byte wrapped CEK 以及两组接收方私钥各自恢复同一 CEK；随后补齐 keys defensive copy/长度、全量 pair pre-validation、完整二元组重复、same-component/different-pair、1..32/顺序/immutable、wrap throws/null/39 与临时数组清零。
+
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridRecipientBuilderTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -535,7 +537,9 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridRecipientBuilderTest -Dsur
 
 Expected: compilation failure，原因是 recipient keys/builder 不存在。
 
-- [ ] **Step 3: 实现每收件人独立 encapsulation**
+2026-07-18 RED 证据：指定 JDK 17 focused 命令 exit 1，编译失败仅因为 `PublicHybridRecipientBuilder` 与 `PublicHybridRecipientKeys` 尚不存在。首轮实现后真实测试还捕获了一次 snapshot ownership 错误（转入 spec 的 raw key 被提前清零，触发 X25519 low-order），经所有权 clone 修正后进入 GREEN。
+
+- [x] **Step 3: 实现每收件人独立 encapsulation**
 
 ```java
 for (PublicHybridRecipientKeys keys : validatedSnapshots) {
@@ -567,7 +571,9 @@ for (PublicHybridRecipientKeys keys : validatedSnapshots) {
 
 在任何 crypto 调用前完成全部 pair 验证和重复 pair 检查。重复检测使用派生 kid 二元组，不依赖 byte-array record equality。
 
-- [ ] **Step 4: 运行 GREEN 与 X25519 builder 回归**
+2026-07-18 GREEN 实现：`PublicHybridRecipientKeys` 严格校验 32/1184 字节并在构造/accessor defensive copy；builder 在任何 agreement/encapsulation/wrap 前完成 1..32、null、CEK 和全部 pair snapshot/二元 kid 重复检查。每个收件人独立调用 `deriveForSender`，显式持有并 finally 清零 KEK、`ek`、wrapped output 与 CEK snapshot，`SenderDerivation` 使用 try-with-resources；结果保持输入顺序并通过 `List.copyOf` 返回，借用 sender handle 不关闭。
+
+- [x] **Step 4: 运行 GREEN 与 X25519 builder 回归**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridRecipientBuilderTest,PublicHybridKekDeriverTest,PublicX25519RecipientBuilderTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -575,7 +581,21 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridRecipientBuilderTest,Publi
 
 Expected: exit 0。
 
-- [ ] **Step 5: review、提交**
+2026-07-18 GREEN 证据：
+
+- 指定 JDK 17 focused matrix exit 0：`PublicHybridRecipientBuilderTest` 7、`PublicHybridKekDeriverTest` 9、`PublicX25519RecipientBuilderTest` 8，共 24 tests，0 failures/errors/skipped；
+- `mvn -q -pl windletter-protocol -am test` exit 0：core 1 suite / 1 test、crypto 8 suites / 55 tests、protocol 28 suites / 363 tests，合计 37 suites / 419 tests，0 failures/errors/skipped。
+
+- [x] **Step 5: review、提交**
+
+2026-07-18 review/verification 证据：
+
+- 独立 spec review：Critical 0、Important 0、Minor 0、P2 0，批准进入 code/security review；
+- 独立 code/security review：Critical 0、Important 0、Minor 0，批准最终验证与单闭环提交；
+- review 确认全 pair pre-validation、二元 kid 去重、逐 recipient 独立 encapsulation、array ownership、wrap failure cleanup、immutable result 与 borrowed sender 均正确；
+- 主任务重新运行 focused matrix：24 tests 全绿；protocol 及依赖模块：37 suites / 419 tests、0 failures/errors/skipped；
+- 三项非阻塞维护/测试 P2 已登记到 §12，不阻塞 Demo；
+- 本闭环提交信息固定为 `feat(protocol): build public hybrid recipients`，实际 hash 由提交后的 `git log` 记录。
 
 ```text
 feat(protocol): build public hybrid recipients
@@ -1115,5 +1135,8 @@ test(protocol): close public hybrid phase
 10. `BouncyCastleMLKem768Crypto.encapsulate` 的 provider getter 临时数组与 holder destroy 已经代码审查和 BC 1.83 字节码核验，但尚无直接 instrumentation 回归测试。
 11. `PublicHybridKekDeriverTest` 尚未单独注入 X25519 provider 返回 null；生产实现已统一拒绝 null/错误长度并在 `finally` 清理，不是实现缺陷。
 12. `PublicHybridKekDeriverTest` 尚未通过完整 sender API 注入 HKDF 失败来直接观察 encapsulation close；生产实现的 try-with-resources 与 outer `finally` 已经代码/安全审查确认。
+13. `PublicHybridRecipientBuilder` 的 API 注释尚未像 X25519 builder 一样显式写明 sender handle 与调用方 CEK 均为 caller-owned；实现 ownership 正确。
+14. `PublicHybridRecipientBuilderTest` 的多收件人 success tracking 只直接观察最后一次 wrap 的临时数组清零；生产循环每次都使用同一 per-recipient `finally`，异常矩阵也已覆盖。
+15. 若 SHA-256 平台不可用导致 pair kid 派生在中途异常，已构造但尚未返回的 `RecipientSpec` 公钥副本可进一步统一清零；仅为非敏感公钥副本，不影响协议或安全正确性。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。
