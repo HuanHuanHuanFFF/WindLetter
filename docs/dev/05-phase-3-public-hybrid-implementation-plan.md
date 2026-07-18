@@ -807,7 +807,7 @@ public final class PublicHybridUnsignedReceiver {
 
 `PublicHybridUnsignedSender.Result` 与现有 unsigned Sender 一致；Receiver Result 为 payload/messageId/timestamp/`UNSIGNED`。
 
-- [ ] **Step 1: 写真实 wire round-trip RED**
+- [x] **Step 1: 写真实 wire round-trip RED**
 
 使用 BC 生成 sender 和两个 Hybrid recipients，payload 必须包含 `0x00`、`0xff` 和非 UTF-8 bytes。只把 Sender 返回的 `wireJson` 交给 Receiver：
 
@@ -824,7 +824,9 @@ assertArrayEquals(payloadBytes, received.payload().data());
 assertEquals(ProtocolAuthenticationStatus.UNSIGNED, received.authenticationStatus());
 ```
 
-- [ ] **Step 2: 运行 RED**
+2026-07-18 RED 测试范围：使用真实 BC X25519、ML-KEM-768、A256KW、A256GCM 生成 sender 与两个完整 Hybrid recipients；锁定每个 recipient 独立 `ek`、只传递真实 `wireJson`、第二收件人恢复包含 `0x00`、`0xff`、`0xc3 0x28` 非 UTF-8 序列的二进制 payload，并返回 `UNSIGNED`。
+
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridUnsignedSenderTest,PublicHybridUnsignedReceiverTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -832,7 +834,9 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridUnsignedSenderTest,PublicH
 
 Expected: compilation failure，原因是两个 unsigned Hybrid flow 不存在。
 
-- [ ] **Step 3: 实现 Sender 主链**
+2026-07-18 RED 证据：指定 JDK 17 focused 命令 exit 1；test compile 失败仅因为 `PublicHybridUnsignedSender` 与 `PublicHybridUnsignedReceiver` 不存在，无其他编译错误。
+
+- [x] **Step 3: 实现 Sender 主链**
 
 ```text
 validate request
@@ -848,7 +852,9 @@ validate request
 → finally clear CEK/IV/inner/GCM AAD/public-key snapshots
 ```
 
-- [ ] **Step 4: 实现 Receiver 精确门序与泛化 key recovery**
+2026-07-18 GREEN Sender 实现：严格校验 UUID v4/timestamp/1..32 完整 recipient pairs 并防御性快照；每封信只生成一个 32-byte CEK 与 12-byte IV，构造精确 public Hybrid protected profile，复用 builder 生成每收件人独立 encapsulation，计算 recipients JCS AAD 与内外 binding，编码 strict unsigned inner 后执行真实 A256GCM 与 outer writer；成功和异常路径均清零 sender public snapshot、CEK、IV、inner 与 GCM AAD，且不关闭 borrowed handles。
+
+- [x] **Step 4: 实现 Receiver 精确门序与泛化 key recovery**
 
 ```text
 strict parse/profile → AAD → paired route → sender X25519 resolve/kid bind
@@ -867,7 +873,9 @@ private static ProtocolException keyRecoveryFailed() {
 
 攻击者输入导致的 X25519/ML-KEM/unwrap failure 使用同一泛化异常且不附 cause。unrelated pair 为 `NOT_FOR_ME` 且不调用 decapsulation。Router 已产生的 `NOT_FOR_ME`、`INVALID_FIELD`、`INTERNAL_ERROR` 原样保留；closed/foreign handle、HKDF/provider null/错误长度等本地/provider contract failure 映射为 `INTERNAL_ERROR`，不得落入 `keyRecoveryFailed()`。
 
-- [ ] **Step 5: 增加门序、ownership、error RED/GREEN**
+2026-07-18 GREEN Receiver 实现：严格执行 parse/profile → AAD → paired route → sender X25519 resolve/kid bind → Hybrid derive → unwrap → GCM → strict inner → binding；攻击者可控的 X25519 low-order、ML-KEM decapsulation 和 A256KW integrity failure 全部收敛为固定 `KEY_UNWRAP_FAILED` / `hybrid recipient key recovery failed` / null cause，router 协议异常原样透传，本地 handle、HKDF 与 provider contract failure 映射 `INTERNAL_ERROR`；finally 清零 sender public snapshot、KEK、CEK、GCM AAD 与 inner plaintext，不关闭任何 borrowed handle。
+
+- [x] **Step 5: 增加门序、ownership、error RED/GREEN**
 
 覆盖 profile、AAD、unrelated pair、unknown sender、matched-pair wrong `ek`、router accessor contract failure、closed/foreign handle、unwrap null/错误长度、GCM、inner、binding、借用 handles 不关闭、CEK/KEK/inner/GCM AAD 清零；分别锁定 router `INTERNAL_ERROR` 透传与 attacker-controlled key recovery 的 code/message/null cause。
 
@@ -877,7 +885,23 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridUnsignedSenderTest,PublicH
 
 Expected: exit 0，旧 X25519 unsigned 回归不变。
 
-- [ ] **Step 6: review、提交**
+2026-07-18 GREEN/回归证据：
+
+- Task 6 新测试：`PublicHybridUnsignedSenderTest` 5、`PublicHybridUnsignedReceiverTest` 14，共 19 tests；覆盖真实两收件人 round-trip、profile/AAD/binding、门序、unrelated pair 零 resolver/零 decapsulation、sender resolver、wrong `ek`/wrapped CEK、统一 key-recovery oracle、router `INTERNAL_ERROR`、closed/foreign handles、provider/HKDF/unwrap contracts、GCM/inner/binding、清零与 borrowed ownership；
+- 计划 focused matrix exit 0：Hybrid 19、既有 X25519 unsigned 23、`OuterWireParserTest` 55，共 97 tests，0 failures/errors/skipped；
+- `mvn -q -pl windletter-protocol -am test` exit 0：core 1 suite / 1 test、crypto 8 suites / 55 tests、protocol 31 suites / 389 tests，合计 40 suites / 445 tests，0 failures/errors/skipped；
+- `git diff --check` exit 0；既存 `docs/README.md` 改动未触碰，未 stage、未 commit、未 push。
+
+- [x] **Step 6: review、提交**
+
+2026-07-18 review/verification 证据：
+
+- 独立 spec review：Critical/P0 0、Important/P1 0、Minor 0；2 项非阻塞 P2；
+- 独立 code/security review：Critical 0、Important 0、Minor 0；4 项非阻塞 P2，其中 1 项与 spec review 重合；
+- review 确认真实 BC wire 主链、完整 pair 语义、严格门序、三类 key-recovery 统一错误、provider/local contract 分类、owned arrays 清零与 borrowed handles 均正确；
+- 主任务使用指定 JDK 17 重新运行 protocol 及依赖模块：40 suites / 445 tests、0 failures/errors/skipped；
+- 合并去重后的 5 项 P2 已登记到 §12，不阻塞 Demo；
+- 本闭环提交信息固定为 `feat(protocol): add public hybrid unsigned flow`，实际 hash 由提交后的 `git log` 记录。
 
 ```text
 feat(protocol): add public hybrid unsigned flow
@@ -1161,5 +1185,10 @@ test(protocol): close public hybrid phase
 16. `PublicHybridKidRouterTest` 尚未直接注入 kid derivation failure；生产实现已由统一 `catch (RuntimeException)` 映射为保留 cause 的 `INTERNAL_ERROR`，标准 JDK 下 SHA-256 不可用也难以稳定构造。
 17. `PublicHybridKidRouter.Match` 的 API 注释尚未显式说明其中两个 private-key handles 仍为 borrowed；实现从不关闭 handles，ownership 行为正确。
 18. `PublicHybridKidRouterTest` 尚未直接观察成功路由时正确长度公钥快照清零，accessor 直接抛异常的分支也未逐个断言 handle 未关闭；生产实现由统一 `finally` 清理且不存在 `close()` 调用。
+19. `PublicHybridUnsignedReceiver` 在重派生 sender X25519 kid 时，若标准 JDK 的 SHA-256 平台能力异常，会裸抛 `IllegalStateException` 且该异常分支的公开公钥 snapshot 未进入统一 `finally`；Java 17 必须提供 SHA-256，正常 Demo 路径不可触发，后续可统一映射 `INTERNAL_ERROR`。
+20. `PublicHybridUnsignedSender` 目前拒绝 null GCM result，但尚未额外检查自定义 provider 返回的 ciphertext 长度必须等于 inner plaintext 长度；真实 BC provider 满足合同，属于 provider hardening。
+21. `PublicHybridUnsignedReceiver.Result` 的公开构造器只校验字段非 null，未强制 `authenticationStatus == UNSIGNED`；生产 `receive()` 固定只构造 `UNSIGNED`，仅影响外部手工构造语义。
+22. Task 6 清零测试尚未直接 instrument Sender/Receiver 各自取得的 sender 公开公钥 snapshot；生产实现的正常成功/失败路径均在 `finally` 清零，且该数据不是秘密。
+23. unsigned inner decode 在 binding 校验前已经物化不可销毁的 `ProtocolPayload` 防御性副本；binding 失败时 decrypted inner 会清零且 payload 不会返回，但 DTO 内部副本只能随 GC 回收，后续需由统一 payload/model cleanup 能力处理。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。
