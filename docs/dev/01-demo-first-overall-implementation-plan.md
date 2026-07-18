@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 2 已完成并封板；阶段 3 已获用户确认并进入开发。ML-KEM kid 协议修订与 Public Hybrid 设计已完成，当前按阶段 3 可执行计划推进。
+> 状态：阶段 3 `Public Hybrid` 已完成并封板；尚未进入阶段 4，等待用户确认下一阶段范围。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -282,6 +282,15 @@ ProtocolSender
 - direct protocol flow 对 decapsulation/unwrap 使用相同 code、泛化 message 和 null cause，不返回 payload；未来 API facade 再统一公开错误。
 - 相关模块测试和 `mvn -q test` 通过。
 
+### 实际封板（2026-07-18）
+
+- `public × X25519ML-KEM-768 × unsigned/signed` 已使用真实 BC X25519、ML-KEM-768、HKDF、A256KW、A256GCM 和 Ed25519 完成 Sender/Receiver 全链路；加上阶段 1/2，public 的 2 algorithm × 2 signing 四组合全部经真实 JSON wire E2E。
+- signed/unsigned 各覆盖 binary、empty 三收件人 wire；同一条 wire 的首、中、尾完整 Hybrid pair 均可独立恢复 payload，unrelated pair 在 resolver/decapsulation 前返回 `NOT_FOR_ME`，每个收件人的真实 `ek` 独立且两两不同。
+- wrong/swapped `ek`、binding、signature、unknown signer 和 exact protected/payload segment tamper 均使用真实密码链到达预期安全门；Hybrid strict parser 条件字段、长度与 canonical Base64URL 矩阵全绿。
+- focused matrix 71/71；protocol 及依赖 45 suites、475 tests；Microsoft OpenJDK 17.0.16 下最终 `mvn -q clean test` 为 56 suites、513 tests，0 failure、0 error、0 skipped，且没有 `@Disabled`。
+- Spec review 与 code/security review 均 PASS，无开放 P0/P1；31 项累计 deferred P2 及影响记录在阶段实施计划 §12，其中 Task 8 新增 5 项均为文档补强或测试 fixture 异常清理，不阻塞 Demo。
+- 阶段 3 由 8 个独立闭环提交组成；未推送，既有 `docs/README.md` 行尾状态噪音未纳入提交。
+
 ## 9. 阶段 4：Obfuscation X25519、rid 与固定分桶
 
 ### 能力目标
@@ -506,15 +515,16 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 2 已完成，`public × X25519` 的 unsigned 与 signed 两条真实多收件人链路均已封板。阶段 3 已获用户确认；2026-07-18 使用指定 JDK 17 重新验证全仓 44 suites、435 tests，0 failure、0 error、0 skipped。
+阶段 3 已完成并封板。当前 `public × {X25519, X25519ML-KEM-768} × {unsigned, signed}` 四组合均有真实多收件人 wire E2E；2026-07-18 使用指定 JDK 17 验证全仓 56 suites、513 tests，0 failure、0 error、0 skipped。阶段 4 尚未开始，当前停在阶段确认门。
 
-ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL(SHA-256(raw 1184-byte public key))`，不再依赖未稳定的 ML-KEM JWK 表示。阶段 3 设计已经独立复审，无开放 Critical/Important。
+ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL(SHA-256(raw 1184-byte public key))`。Phase 3 最终 spec 与 code/security review 均无 Critical/Important/P0/P1；累计 P2 详见 `docs/dev/05-phase-3-public-hybrid-implementation-plan.md` §12。
 
 已知但不阻塞下一阶段的问题：
 
 - 正式协议对 signed inner 的 `typ`、flattened JWS 展示结构和 receiver 侧非 JCS 接受策略仍有文档歧义；可执行 profile 已由阶段 2 exact-byte tests 冻结，正式文档清理作为 P2 后置。
 - Stage 1 保留少量 hardening：GCM AAD helper 显式 ASCII 校验、outer protected strict UTF-8 decoder、wire writer 异常分类收窄、含数组值对象的相等语义与第三方 provider 违约防御。
 - 阶段 2 的 signed/unsigned orchestration 重复、effective payload 上限、Java immutable string 清零边界和 API dormant invariants 等 P2 详见 `docs/dev/03-phase-2-signed-authentication-plan.md` §11。
-- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 3 Hybrid 主链。
+- 阶段 3 仍有完整 Hybrid pair 规范化表述、canonical Base64URL/封闭字段集、内部错误到 API 公开 `InvalidMessage` 的映射，以及少量生命周期/测试 hardening P2；实现已采取更严格行为，不影响当前协议链正确性。
+- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 4。
 
-下一步按 `docs/dev/05-phase-3-public-hybrid-implementation-plan.md` 从 Task 1 开始：先关闭 ML-KEM encapsulation shared-secret 生命周期，再依次完成 raw-key kid、Hybrid KEK、recipient builder、paired routing、unsigned/signed flow 与完整 E2E。范围仍限定为 `public × X25519ML-KEM-768 × unsigned/signed`，不同时引入 obfuscation、Armor 或 API facade。
+下一步候选为阶段 4：`obfuscation × X25519 × unsigned/signed`，包括 per-message ephemeral X25519、`rid/ecc`、完整扫描、8/16/32 固定 bucket、诱饵和 shuffle。按阶段门禁要求，本轮不继续写阶段 4 代码；等待用户确认后，先重新审计协议、现有源码和阶段 4 子计划，再确定首个闭环。

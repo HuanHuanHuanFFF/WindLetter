@@ -8,6 +8,8 @@
 
 **Tech Stack:** Java 17、Maven reactor、Bouncy Castle 1.83、Jackson、RFC 8785 JCS、JUnit 5。
 
+**Status:** 2026-07-18 Phase 3 已完成全部 8 个闭环并通过最终门禁；等待用户确认后再进入 Phase 4。
+
 ---
 
 ## 1. 执行基线与约束
@@ -1078,13 +1080,13 @@ feat(protocol): add public hybrid signed flow
 - Modify after all gates pass: `docs/dev/05-phase-3-public-hybrid-implementation-plan.md`
 - Modify after all gates pass: `docs/dev/01-demo-first-overall-implementation-plan.md`
 
-- [ ] **Step 1: 三收件人真实 wire E2E**
+- [x] **Step 1: 三收件人真实 wire E2E**
 
 对 unsigned 和 signed 分别创建三个不同 X25519/ML-KEM pairs。目标位于首、中、尾时，只向 Receiver 提供该目标自己的 pair，必须从同一条 wire 恢复相同 binary payload；unrelated pair 为 `NOT_FOR_ME`。
 
 同时覆盖 empty payload，并断言三个 1088-byte `ek` 两两不同。
 
-- [ ] **Step 2: authenticated Hybrid tamper**
+- [x] **Step 2: authenticated Hybrid tamper**
 
 为需要越过 GCM 的测试使用真实 CEK/IV、真实 Hybrid KEK、重新计算 AAD/binding 并真实 GCM 加密，分别构造：
 
@@ -1095,7 +1097,7 @@ feat(protocol): add public hybrid signed flow
 
 前两项必须是同一 `KEY_UNWRAP_FAILED` code/message 且 cause 都为 null；binding 和 signature 分别命中既有错误码。
 
-- [ ] **Step 3: strict Hybrid parser 回归**
+- [x] **Step 3: strict Hybrid parser 回归**
 
 在 `OuterWireParserTest` 显式覆盖：
 
@@ -1109,7 +1111,7 @@ feat(protocol): add public hybrid signed flow
 
 生产 parser 已有行为时，只增加回归测试，不改 parser。
 
-- [ ] **Step 4: 运行 focused matrix**
+- [x] **Step 4: 运行 focused matrix**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridUnsignedMultiRecipientE2ETest,PublicHybridSignedMultiRecipientE2ETest,PublicHybridTamperE2ETest,PublicX25519UnsignedMultiRecipientE2ETest,PublicX25519SignedMultiRecipientE2ETest,OuterWireParserTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -1117,7 +1119,7 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridUnsignedMultiRecipientE2ET
 
 Expected: exit 0。
 
-- [ ] **Step 5: module 与 full reactor gate**
+- [x] **Step 5: module 与 full reactor gate**
 
 ```powershell
 mvn -q -pl windletter-protocol -am test
@@ -1137,13 +1139,13 @@ Expected:
 - `git diff --cached --name-only` 不包含 `docs/README.md`；
 - 实际变更文件只属于 Phase 3。
 
-- [ ] **Step 6: final spec review 与 code/security review**
+- [x] **Step 6: final spec review 与 code/security review**
 
 Spec review 逐项核对正式协议开发修订、设计文档和本计划；security review 检查 key confusion、pair routing、implicit rejection、error oracle、provider contract、secret zeroization、borrowed handles 和真实测试链路。
 
 所有 Critical/Important/P0/P1 修复并复审后才能继续。
 
-- [ ] **Step 7: 写完成证据与 P2 register**
+- [x] **Step 7: 写完成证据与 P2 register**
 
 在本计划记录：
 
@@ -1155,32 +1157,44 @@ Spec review 逐项核对正式协议开发修订、设计文档和本计划；se
 
 更新 overall plan 为阶段 3 完成，并把下一步指向阶段 4，但停止开发等待用户确认。
 
-- [ ] **Step 8: 提交阶段封板**
+- [x] **Step 8: 提交阶段封板**
 
 ```text
 test(protocol): close public hybrid phase
 ```
 
+2026-07-18 Task 8 / Phase 3 封板证据：
+
+- unsigned 与 signed 各生成 binary、empty 两条真实三收件人 wire；每条 wire 分别只提供首、中、尾收件人的完整 Hybrid pair，4 次 send 共完成 12 次 receive，全部恢复原 payload；unrelated pair 在 sender/signing resolver 与 ML-KEM decapsulation 前返回 `NOT_FOR_ME`；
+- 每条 wire 都验证三个真实 pair kid、40-byte wrapped CEK、三个 1088-byte `ek`，且 `ek` 两两不同；Public X25519/Hybrid × unsigned/signed 四组合同时进入 focused 回归；
+- wrong real encapsulation 与 swapped `ek` 在两种 profile 中均精确收敛为 `KEY_UNWRAP_FAILED` / `hybrid recipient key recovery failed` / null cause；
+- authenticated tamper 使用真实 Hybrid derive、A256KW unwrap、原 CEK/IV/AAD 和真实 A256GCM 重加密：wrong binding 命中 `BINDING_FAILED` 且早于 signer resolver/verify；flipped signature、unknown real signer、protected/payload exact-segment change 均命中 `SIGNATURE_INVALID`；
+- strict parser 回归为 59 tests，覆盖 Hybrid missing/extra、31/33-byte kid、1087/1089-byte `ek`、padded/non-canonical/illegal-alphabet Base64URL、protected sender 多余 ML-KEM kid，以及 malformed 优先于 conditional/length；生产 parser 无需修改；
+- 指定 JDK 17.0.16 下 focused matrix 71/71；`mvn -q -pl windletter-protocol -am test` 为 45 suites / 475 tests；`mvn -q clean test` 为 56 suites / 513 tests；全部 0 failure、0 error、0 skipped，且没有 `@Disabled`；
+- `git diff --check` 通过；`docs/README.md` 内容 diff 仍为空且未纳入本闭环；
+- 独立 spec review：Critical/P0 0、Important/P1 0，4 项文档补强 P2；独立 code/security review：Critical/P0 0、Important/P1 0，1 项测试 fixture 清理 P2；均确认可以封板；
+- Phase 3 闭环提交：`6dcce18`、`a341aa4`、`db85a0b`、`b6c2ee4`、`f537a2c`、`4d88cd2`、`8716387`，Task 8 提交信息固定为 `test(protocol): close public hybrid phase`；协议修订、设计和执行计划分别为 `de54e12`、`99455b4`、`f2200b0`。
+
 ## 11. P0/P1 completion checklist
 
-- [ ] ML-KEM kid 是 raw 1184-byte public key 的 SHA-256，不是 JWK/JCS/DER/SPKI。
-- [ ] 固定向量为 `7NTPOwdCAmuWvE0fGJTJZ5R3RxDExM43huxxjF4IzVc`。
-- [ ] `Z = SS_ECC || SS_PQ` 且 Hybrid HKDF 固定向量匹配。
-- [ ] 每个 recipient 独立真实 encapsulate，`ek` 不复用。
-- [ ] Router 只按完整 pair 匹配，拒绝重复 local/wire pair。
-- [ ] unrelated PQ handle 为 `NOT_FOR_ME` 且不 decapsulate。
-- [ ] matched pair wrong `ek` 与 unwrap failure 使用相同 code/message/null cause。
-- [ ] provider/local contract failure 为 `INTERNAL_ERROR`。
-- [ ] unsigned 完全跳过 Ed25519。
-- [ ] signed 只在 binding 后验签，并只返回可信 identity。
-- [ ] 任意失败不返回 payload/identity。
-- [ ] borrowed X25519、ML-KEM、Ed25519 handles 不被 flow 关闭。
-- [ ] ML-KEM internal secret、ECC/PQ secrets、Z、KEK、CEK、inner、GCM AAD 和签名临时数组按 ownership 清零。
-- [ ] public X25519/Hybrid × unsigned/signed 四组合真实 wire E2E 全绿。
-- [ ] binary/empty payload、首中尾 recipient 和 non-recipient 全绿。
-- [ ] strict Hybrid conditional/canonical/length matrix 全绿。
-- [ ] JDK 17 full reactor gate、reviews 和 diff gate 通过。
-- [ ] 没有开放 P0/P1。
+- [x] ML-KEM kid 是 raw 1184-byte public key 的 SHA-256，不是 JWK/JCS/DER/SPKI。
+- [x] 固定向量为 `7NTPOwdCAmuWvE0fGJTJZ5R3RxDExM43huxxjF4IzVc`。
+- [x] `Z = SS_ECC || SS_PQ` 且 Hybrid HKDF 固定向量匹配。
+- [x] 每个 recipient 独立真实 encapsulate，`ek` 不复用。
+- [x] Router 只按完整 pair 匹配，拒绝重复 local/wire pair。
+- [x] unrelated PQ handle 为 `NOT_FOR_ME` 且不 decapsulate。
+- [x] matched pair wrong `ek` 与 unwrap failure 使用相同 code/message/null cause。
+- [x] provider/local contract failure 为 `INTERNAL_ERROR`。
+- [x] unsigned 完全跳过 Ed25519。
+- [x] signed 只在 binding 后验签，并只返回可信 identity。
+- [x] 任意失败不返回 payload/identity。
+- [x] borrowed X25519、ML-KEM、Ed25519 handles 不被 flow 关闭。
+- [x] ML-KEM internal secret、ECC/PQ secrets、Z、KEK、CEK、inner、GCM AAD 和签名临时数组按 ownership 清零。
+- [x] public X25519/Hybrid × unsigned/signed 四组合真实 wire E2E 全绿。
+- [x] binary/empty payload、首中尾 recipient 和 non-recipient 全绿。
+- [x] strict Hybrid conditional/canonical/length matrix 全绿。
+- [x] JDK 17 full reactor gate、reviews 和 diff gate 通过。
+- [x] 没有开放 P0/P1。
 
 ## 12. Deferred P2 register
 
@@ -1212,5 +1226,10 @@ test(protocol): close public hybrid phase
 24. `SignedInnerCodec.Prepared` 持有可逆的 Base64URL payload string；关闭时会清零 signing input，但 immutable string 只能随 GC 回收。后续可改为可关闭的字节缓冲区，并与“验证成功后转移 payload 所有权”的模型一起处理。
 25. signed Receiver 对 unknown signer 与 Ed25519 verify false 均返回 `SIGNATURE_INVALID`，但内部诊断 message 不同；当前必须先通过 recipient key recovery 与 GCM 才能到达该层，Phase 6 API facade 对外暴露时可统一公开错误文案，避免未来形成可信 signing-kid 枚举差异。
 26. 少数 Task 7 测试 helper 取得的 public-key、`ek` 等非秘密副本只在正常断言路径清零，断言中断时可能等待 GC；不影响生产实现、协议或敏感数据安全。
+27. 正式协议尚未把 public Hybrid 完整 `(kid.x25519, kid.mlkem768)` pair 路由、禁止跨 wire/local record 拼接写成独立规范性条款；当前实现与测试已经采用更严格且抗 key-confusion 的完整 pair 语义，后续应补充开发修订以提升互操作自包含性。
+28. 正式协议尚未集中写明 canonical Base64URL 与各 profile 封闭字段集；当前 strict parser 已拒绝 padding、非法 alphabet、非 canonical trailing bits、X25519 recipient 多余 Hybrid 字段和 public sender 多余 ML-KEM kid，后续应把这些既有安全行为补入规范。
+29. 协议模块内部的 `KEY_UNWRAP_FAILED`、`BINDING_FAILED`、`SIGNATURE_INVALID` 与正式协议“对外统一 InvalidMessage”之间仍需在 Phase 6 API/投递边界明确映射；当前 direct protocol flow 不面向远端暴露，API facade 接线时必须统一公开错误，避免错误 oracle。
+30. strict parser 的 malformed/unsupported/conditional-length 错误优先级，以及 `payload.data=""` / `original_size=0` 为合法空 payload，已经由测试冻结但正式协议未集中明文；属于文档自包含性与互操作补强。
+31. `PublicHybridFlowTestFixtures` 在字段初始化阶段逐个生成测试私钥；若后续 provider 生成或 kid 派生异常，对象无法构造完成并调用 `close()`，先前生成的测试 handle 只能等待 GC。只影响异常 provider 下的测试 JVM 清理，不影响生产协议链，后续可改为构造器局部变量与失败清理守卫。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。

@@ -472,21 +472,23 @@ class OuterWireParserTest {
 
     @Test
     void rejectsInvalidRecipientKidMlkem768Length() {
-        ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
-        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
-        ObjectNode kid = (ObjectNode) recipient.get("kid");
-        kid.put("mlkem768", b64(bytes(31, 6)));
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+        for (int length : new int[]{31, 33}) {
+            ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            ObjectNode kid = (ObjectNode) recipient.get("kid");
+            kid.put("mlkem768", b64(bytes(length, 6)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
     }
 
     @Test
     void rejectsInvalidEkLength() {
-        ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
-        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
-        recipient.put("ek", b64(bytes(1087, 7)));
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+        for (int length : new int[]{1087, 1089}) {
+            ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            recipient.put("ek", b64(bytes(length, 7)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
     }
 
     @Test
@@ -522,12 +524,61 @@ class OuterWireParserTest {
     }
 
     @Test
-    void rejectsX25519WithEk() {
-        ObjectNode outer = validOuter("public", "X25519", "wind+jws");
-        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
-        recipient.put("ek", b64(bytes(1088, 11)));
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+    void rejectsX25519WithHybridRecipientFields() {
+        ObjectNode withMlKemKid = validOuter("public", "X25519", "wind+jws");
+        ObjectNode kid = (ObjectNode) withMlKemKid.withArray("recipients").get(0).get("kid");
+        kid.put("mlkem768", b64(bytes(32, 11)));
+        assertCode(ErrorCode.INVALID_FIELD, withMlKemKid);
+
+        ObjectNode withEk = validOuter("public", "X25519", "wind+jws");
+        ObjectNode recipient = (ObjectNode) withEk.withArray("recipients").get(0);
+        recipient.put("ek", b64(bytes(1088, 12)));
+        assertCode(ErrorCode.INVALID_FIELD, withEk);
+    }
+
+    @Test
+    void rejectsPublicHybridMissingRequiredRecipientFields() {
+        for (String missingField : new String[]{"mlkem768", "ek"}) {
+            ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            if ("mlkem768".equals(missingField)) {
+                ((ObjectNode) recipient.get("kid")).remove(missingField);
+            } else {
+                recipient.remove(missingField);
+            }
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
+    }
+
+    @Test
+    void rejectsPublicHybridProtectedSenderMlkemKid() {
+        ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
+        ObjectNode protectedHeader = decodeProtected(outer.get("protected").asText());
+        ((ObjectNode) protectedHeader.get("kid")).put("mlkem768", b64(bytes(32, 13)));
+        outer.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+        assertCode(ErrorCode.INVALID_FIELD, outer);
+    }
+
+    @Test
+    void malformedHybridRecipientKidBeatsMissingEk() {
+        for (String malformed : malformedBase64UrlValues(32)) {
+            ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            ((ObjectNode) recipient.get("kid")).put("mlkem768", malformed);
+            recipient.remove("ek");
+            assertCode(ErrorCode.MALFORMED_WIRE, outer);
+        }
+    }
+
+    @Test
+    void malformedHybridEkBeatsInvalidKidLength() {
+        for (String malformed : malformedBase64UrlValues(1088)) {
+            ObjectNode outer = validOuter("public", "X25519ML-KEM-768", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            ((ObjectNode) recipient.get("kid")).put("mlkem768", b64(bytes(31, 14)));
+            recipient.put("ek", malformed);
+            assertCode(ErrorCode.MALFORMED_WIRE, outer);
+        }
     }
 
     @Test
@@ -660,6 +711,13 @@ class OuterWireParserTest {
         return BASE64_URL.encodeToString(value);
     }
 
+    private static String[] malformedBase64UrlValues(int decodedLength) {
+        String canonical = b64(new byte[decodedLength]);
+        String nonCanonical = canonical.substring(0, canonical.length() - 1) + "B";
+        String invalidAlphabet = "+" + canonical.substring(1);
+        return new String[]{canonical + "=", nonCanonical, invalidAlphabet};
+    }
+
     private static String withRawRecipients(ObjectNode outer, String rawRecipients) {
         String wire = toJson(outer);
         String serializedRecipients = toJson(outer.get("recipients"));
@@ -669,6 +727,14 @@ class OuterWireParserTest {
     private void assertMalformed(String wire) {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(wire));
         assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+    }
+
+    private void assertCode(ErrorCode expected, ObjectNode outer) {
+        ProtocolException ex = assertThrows(
+                ProtocolException.class,
+                () -> parser.parse(toJson(outer))
+        );
+        assertEquals(expected, ex.errorCode());
     }
 
     private static String toJson(com.fasterxml.jackson.databind.JsonNode node) {
