@@ -981,7 +981,7 @@ public final class PublicHybridSignedReceiver {
 }
 ```
 
-- [ ] **Step 1: 写真实 signed round-trip RED**
+- [x] **Step 1: 写真实 signed round-trip RED**
 
 ```java
 assertEquals("X25519ML-KEM-768", sent.message().protectedHeader().keyAlg());
@@ -992,7 +992,7 @@ assertEquals("trusted-sender-1", received.authenticatedSender().identityId());
 
 测试必须从 wire JSON 接收，trusted resolver 返回与 exact signing kid 绑定的真实 Ed25519 public key。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridSignedSenderTest,PublicHybridSignedReceiverTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -1000,7 +1000,7 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridSignedSenderTest,PublicHyb
 
 Expected: compilation failure，原因是两个 signed Hybrid flow 不存在。
 
-- [ ] **Step 3: 实现 signed Sender**
+- [x] **Step 3: 实现 signed Sender**
 
 复用 Task 6 outer 主链，但：
 
@@ -1015,7 +1015,7 @@ cty=wind+jws
 
 所有 private handles 为 borrowed；finally 清零 signing public snapshot、signing input、signature、inner、CEK、IV 和 GCM AAD。
 
-- [ ] **Step 4: 实现 signed Receiver**
+- [x] **Step 4: 实现 signed Receiver**
 
 复用 Task 6 到 binding 为止，然后：
 
@@ -1031,7 +1031,7 @@ strict SignedInnerCodec.decode
 
 未知 signer、错误 key 和 false verification 为 `SIGNATURE_INVALID`；resolver/provider contract failure 为 `INTERNAL_ERROR`；任何失败不返回 payload/identity。
 
-- [ ] **Step 5: 加入 gate-order 与回归 tests**
+- [x] **Step 5: 加入 gate-order 与回归 tests**
 
 确认 binding 失败发生在 signing resolver 前；unrelated pair 发生在 sender/signing resolver 前；signed flow 原样保留 router 的 `INTERNAL_ERROR`，且 attacker-controlled key-recovery code/message/cause 与 Task 6 相同。
 
@@ -1041,7 +1041,26 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridSignedSenderTest,PublicHyb
 
 Expected: exit 0。
 
-- [ ] **Step 6: review、提交**
+Task 7 Step 1-5 实际证据：
+
+- 真实 BC 双收件人 binary round-trip 已覆盖：outer 为 `X25519ML-KEM-768` / `wind+jws`，Receiver 从 wire JSON 定位第二个完整 key pair，恢复原 payload，并只在验签成功后返回 `SIGNED_VALID` 与 trusted identity；
+- RED 使用指定 JDK 17 运行两个新测试类，编译按预期失败，唯一原因是 `PublicHybridSignedSender` / `PublicHybridSignedReceiver` 尚不存在；
+- Sender 已实现 actual borrowed Ed25519 handle 公钥重派生 kid、`SignedInnerCodec.prepare`、exact prepared signing input 签名、64-byte signature contract、assemble、GCM 与 strict outer writer，并在所有路径清零 owned public snapshots、CEK、IV、signing input、signature、inner 和 AAD；
+- Receiver 已实现 strict profile/AAD、完整 pair routing、sender X25519 resolve/kid bind、Hybrid derive/unwrap、GCM、strict signed inner decode、binding、trusted signing record 双重 kid 校验、exact received segments 验签；attacker-controlled derive/decap/unwrap 失败继续统一为 `KEY_UNWRAP_FAILED` / `hybrid recipient key recovery failed` / null cause；
+- 新增 Sender 6 tests、Receiver 12 tests；覆盖 unrelated/router/binding 门序、unknown signer、trusted record/public mismatch、verify false/throw、non-canonical exact segments、三类 Hybrid key-recovery、owned-array cleanup 与 borrowed handles；
+- 指定 focused matrix exit 0；随后运行 `mvn -q -pl windletter-protocol -am test`：42 suites / 463 tests、0 failures/errors/skipped；
+- Step 6 的正式 review、提交证据见下；本轮识别的非阻塞明文生命周期 P2 已登记到 §12。
+
+- [x] **Step 6: review、提交**
+
+2026-07-18 review/verification 证据：
+
+- 独立 spec review：Critical/P0 0、Important/P1 0、Minor 0；4 项可延期 P2；
+- 独立 code/security review：Critical 0、Important 0、Minor 0；5 项可延期 P2；
+- review 确认 exact Prepared/Decoded segments、binding-before-resolver/verify、trusted record kid + 实际公钥 kid + Ed25519 verify 三道身份门、Task 6 key-recovery 语义、owned arrays 与 borrowed handles 均正确；
+- 主任务使用指定 JDK 17 重新运行 protocol 及依赖模块：42 suites / 463 tests、0 failures/errors/skipped；
+- 合并去重后的 6 项 Task 7 相关 P2 均已登记到 §12，不阻塞 Demo；
+- 本闭环提交信息固定为 `feat(protocol): add public hybrid signed flow`，实际 hash 由提交后的 `git log` 记录。
 
 ```text
 feat(protocol): add public hybrid signed flow
@@ -1185,10 +1204,13 @@ test(protocol): close public hybrid phase
 16. `PublicHybridKidRouterTest` 尚未直接注入 kid derivation failure；生产实现已由统一 `catch (RuntimeException)` 映射为保留 cause 的 `INTERNAL_ERROR`，标准 JDK 下 SHA-256 不可用也难以稳定构造。
 17. `PublicHybridKidRouter.Match` 的 API 注释尚未显式说明其中两个 private-key handles 仍为 borrowed；实现从不关闭 handles，ownership 行为正确。
 18. `PublicHybridKidRouterTest` 尚未直接观察成功路由时正确长度公钥快照清零，accessor 直接抛异常的分支也未逐个断言 handle 未关闭；生产实现由统一 `finally` 清理且不存在 `close()` 调用。
-19. `PublicHybridUnsignedReceiver` 在重派生 sender X25519 kid 时，若标准 JDK 的 SHA-256 平台能力异常，会裸抛 `IllegalStateException` 且该异常分支的公开公钥 snapshot 未进入统一 `finally`；Java 17 必须提供 SHA-256，正常 Demo 路径不可触发，后续可统一映射 `INTERNAL_ERROR`。
-20. `PublicHybridUnsignedSender` 目前拒绝 null GCM result，但尚未额外检查自定义 provider 返回的 ciphertext 长度必须等于 inner plaintext 长度；真实 BC provider 满足合同，属于 provider hardening。
+19. `PublicHybridUnsignedReceiver` 与 `PublicHybridSignedReceiver` 在重派生 sender X25519 kid 时，若标准 JDK 的 SHA-256 平台能力异常，会裸抛 `IllegalStateException` 且该异常分支的公开公钥 snapshot 未进入统一 `finally`；Java 17 必须提供 SHA-256，正常 Demo 路径不可触发，后续可统一映射 `INTERNAL_ERROR`。
+20. `PublicHybridUnsignedSender` 与 `PublicHybridSignedSender` 目前拒绝 null GCM result，但尚未额外检查自定义 provider 返回的 ciphertext 长度必须等于 inner plaintext 长度；真实 BC provider 满足合同，属于 provider hardening。
 21. `PublicHybridUnsignedReceiver.Result` 的公开构造器只校验字段非 null，未强制 `authenticationStatus == UNSIGNED`；生产 `receive()` 固定只构造 `UNSIGNED`，仅影响外部手工构造语义。
 22. Task 6 清零测试尚未直接 instrument Sender/Receiver 各自取得的 sender 公开公钥 snapshot；生产实现的正常成功/失败路径均在 `finally` 清零，且该数据不是秘密。
-23. unsigned inner decode 在 binding 校验前已经物化不可销毁的 `ProtocolPayload` 防御性副本；binding 失败时 decrypted inner 会清零且 payload 不会返回，但 DTO 内部副本只能随 GC 回收，后续需由统一 payload/model cleanup 能力处理。
+23. unsigned/signed inner decode 在 binding 或验签完成前已经物化不可销毁的 `ProtocolPayload` 防御性副本；失败时 decrypted inner 会清零且 payload 不会返回，但 DTO 内部副本只能随 GC 回收，后续需由统一 payload/model cleanup 能力处理。
+24. `SignedInnerCodec.Prepared` 持有可逆的 Base64URL payload string；关闭时会清零 signing input，但 immutable string 只能随 GC 回收。后续可改为可关闭的字节缓冲区，并与“验证成功后转移 payload 所有权”的模型一起处理。
+25. signed Receiver 对 unknown signer 与 Ed25519 verify false 均返回 `SIGNATURE_INVALID`，但内部诊断 message 不同；当前必须先通过 recipient key recovery 与 GCM 才能到达该层，Phase 6 API facade 对外暴露时可统一公开错误文案，避免未来形成可信 signing-kid 枚举差异。
+26. 少数 Task 7 测试 helper 取得的 public-key、`ek` 等非秘密副本只在正常断言路径清零，断言中断时可能等待 GC；不影响生产实现、协议或敏感数据安全。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。
