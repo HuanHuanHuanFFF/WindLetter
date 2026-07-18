@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 3 已完成并封板；阶段 4 `Obfuscation X25519` 设计已获用户确认，协议开发修订与设计文档已写入，尚未编写实施计划或修改生产代码。
+> 状态：阶段 3 已完成并封板；阶段 4 `Obfuscation X25519` 协议修订、设计与实施计划已完成，等待用户确认后执行第一个代码闭环，尚未修改生产代码。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -143,7 +143,7 @@ Outer 与 inner 都必须：
 | 1 | public × X25519 × unsigned 真实多收件人 E2E | protocol、api contract | 已完成（285 tests；0 failure/error/skip） |
 | 2 | public × X25519 × signed | protocol | 已完成并封板 |
 | 3 | public × Hybrid × signed/unsigned | protocol | 已完成并封板 |
-| 4 | obfuscation × X25519 × signed/unsigned | protocol | 设计完成，实施未开始 |
+| 4 | obfuscation × X25519 × signed/unsigned | protocol | 设计与实施计划完成，实施未开始 |
 | 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 未开始 |
 | 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 未开始 |
 | 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 未开始 |
@@ -518,7 +518,7 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 3 已完成并封板。当前 `public × {X25519, X25519ML-KEM-768} × {unsigned, signed}` 四组合均有真实多收件人 wire E2E；2026-07-18 使用指定 JDK 17 验证全仓 56 suites、513 tests，0 failure、0 error、0 skipped。阶段 4 设计已获用户确认，当前停在书面设计复核门，尚未修改生产代码。
+阶段 3 已完成并封板。当前 `public × {X25519, X25519ML-KEM-768} × {unsigned, signed}` 四组合均有真实多收件人 wire E2E；2026-07-18 使用指定 JDK 17 验证全仓 56 suites、513 tests，0 failure、0 error、0 skipped。阶段 4 设计已经用户确认且独立复核无开放 P0/P1，可执行实施计划已经写入，尚未修改生产代码。
 
 ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL(SHA-256(raw 1184-byte public key))`。Phase 3 最终 spec 与 code/security review 均无 Critical/Important/P0/P1；累计 P2 详见 `docs/dev/05-phase-3-public-hybrid-implementation-plan.md` §12。
 
@@ -530,4 +530,4 @@ ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL
 - 阶段 3 仍有完整 Hybrid pair 规范化表述、canonical Base64URL/封闭字段集、内部错误到 API 公开 `InvalidMessage` 的映射，以及少量生命周期/测试 hardening P2；实现已采取更严格行为，不影响当前协议链正确性。
 - `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 4。
 
-下一步先复核 `docs/dev/06-phase-4-obfuscation-x25519-design.md`；确认后编写阶段 4 可执行实施计划，再按 RED → GREEN、双重 review 和单闭环 commit 开发。范围限定为 `obfuscation × X25519 × unsigned/signed`，不提前引入 Hybrid、API 或 armor。
+下一步在用户确认实施计划后执行 Task 1：`rid/ecc + KEK` 联合派生与 secret lifecycle；随后按 `docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md` 的 6 个 RED → GREEN、双重 review、单闭环 commit 依次开发。范围限定为 `obfuscation × X25519 × unsigned/signed`，不提前引入 Hybrid、API 或 armor。

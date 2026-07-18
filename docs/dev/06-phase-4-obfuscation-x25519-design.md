@@ -1,6 +1,6 @@
 # WindLetter Phase 4 Obfuscation X25519 Design
 
-> 状态：2026-07-18 已获用户确认并完成协议语义冻结；等待本文复核确认后编写实施计划，尚未修改生产代码。
+> 状态：2026-07-18 已获用户确认并完成协议语义冻结，独立复核无开放 P0/P1；实施计划已写入 `docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md`，尚未修改生产代码。
 
 ## 1. 目标与范围
 
