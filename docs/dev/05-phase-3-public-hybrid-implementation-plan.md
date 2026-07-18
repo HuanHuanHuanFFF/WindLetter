@@ -635,7 +635,7 @@ public final class PublicHybridKidRouter {
 }
 ```
 
-- [ ] **Step 1: 写 pair-only RED**
+- [x] **Step 1: 写 pair-only RED**
 
 至少覆盖：
 
@@ -659,7 +659,9 @@ assertEquals(
 - 本地 handle public-key accessor 抛异常、返回 null 或返回错误长度 → `INTERNAL_ERROR`；
 - borrowed handles 在成功和失败后仍可使用。
 
-- [ ] **Step 2: 运行 RED**
+2026-07-18 RED 测试范围：先锁定完整 X25519/ML-KEM kid pair 才能路由、unrelated pair 为 `NOT_FOR_ME`；随后补齐首/中/尾、X-only/PQ-only/cross mismatch、重复 local/matching wire、unrelated duplicate、多个 distinct match 后继续扫描、X/PQ accessor contract failure、snapshot 清零与 borrowed/record/Match invariants。
+
+- [x] **Step 2: 运行 RED**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKidRouterTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -667,7 +669,9 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKidRouterTest -Dsurefire.f
 
 Expected: compilation failure，原因是 private-pair/router 不存在。
 
-- [ ] **Step 3: 实现 local-map + wire-first full scan**
+2026-07-18 RED 证据：指定 JDK 17 focused 命令 exit 1，编译失败仅因为 `PublicHybridRecipientPrivateKeys` 与 `PublicHybridKidRouter` 尚不存在。
+
+- [x] **Step 3: 实现 local-map + wire-first full scan**
 
 ```java
 Map<KidPair, PublicHybridRecipientPrivateKeys> localByPair = buildValidatedLocalMap(privateKeys);
@@ -705,7 +709,9 @@ private static ProtocolException internal(String message, Throwable cause) {
 
 构建 local map 时从两个 handles 取得公钥、校验 32/1184 bytes、派生两个 kid，并在 finally 清零公钥快照。只在 accessor/本地 key snapshot 校验与 kid 派生边界捕获本地异常，并用 `internal("failed to inspect local hybrid key handles", cause)` 映射；不要把本地产生的 `INTERNAL_ERROR` 再送入 `invalid()`。具有合法 accessor 的 foreign handle 可完成路由，但必须在后续 crypto provider ownership 检查处映射为 `INTERNAL_ERROR`。
 
-- [ ] **Step 4: 运行 GREEN 与现有 router 回归**
+2026-07-18 GREEN 实现：private-pair record 仅校验两个 borrowed handles 非 null且不实现 `AutoCloseable`；router 先完整构建本地二元 kid map，重复完整 pair 为 `INVALID_FIELD`，accessor/null/长度/kid 派生失败统一保留 cause 映射 `INTERNAL_ERROR`，并在 finally 清零两个 public snapshots。wire 按原顺序 full scan，仅完整 pair 匹配，缺少 PQ kid 为 `INVALID_FIELD`；只跟踪匹配本地的 wire pair 重复，选择第一个 distinct match但不提前返回，且始终不关闭 handles。
+
+- [x] **Step 4: 运行 GREEN 与现有 router 回归**
 
 ```powershell
 mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKidRouterTest,PublicKidRouterTest -Dsurefire.failIfNoSpecifiedTests=false test
@@ -713,7 +719,21 @@ mvn -q -pl windletter-protocol -am -Dtest=PublicHybridKidRouterTest,PublicKidRou
 
 Expected: exit 0。
 
-- [ ] **Step 5: review、提交**
+2026-07-18 GREEN 证据：
+
+- 指定 JDK 17 focused matrix exit 0：`PublicHybridKidRouterTest` 7、`PublicKidRouterTest` 6，共 13 tests，0 failures/errors/skipped；
+- `mvn -q -pl windletter-protocol -am test` exit 0：core 1 suite / 1 test、crypto 8 suites / 55 tests、protocol 29 suites / 370 tests，合计 38 suites / 426 tests，0 failures/errors/skipped。
+
+- [x] **Step 5: review、提交**
+
+2026-07-18 review/verification 证据：
+
+- 独立 spec review：Critical 0、Important 0、Minor 0；1 项非阻塞测试增强 P2；
+- 独立 code/security review：Critical 0、Important 0、Minor 0；2 项非阻塞注释/测试 P2；
+- review 确认完整 pair 路由、wire-order full scan、duplicate 规则、`INTERNAL_ERROR` cause、snapshot 清零与 borrowed ownership 均正确；
+- 主任务使用指定 JDK 17 重新运行 protocol 及依赖模块：38 suites / 426 tests、0 failures/errors/skipped；
+- 三项 P2 已登记到 §12，不阻塞 Demo；
+- 本闭环提交信息固定为 `feat(protocol): route public hybrid key pairs`，实际 hash 由提交后的 `git log` 记录。
 
 ```text
 feat(protocol): route public hybrid key pairs
@@ -1138,5 +1158,8 @@ test(protocol): close public hybrid phase
 13. `PublicHybridRecipientBuilder` 的 API 注释尚未像 X25519 builder 一样显式写明 sender handle 与调用方 CEK 均为 caller-owned；实现 ownership 正确。
 14. `PublicHybridRecipientBuilderTest` 的多收件人 success tracking 只直接观察最后一次 wrap 的临时数组清零；生产循环每次都使用同一 per-recipient `finally`，异常矩阵也已覆盖。
 15. 若 SHA-256 平台不可用导致 pair kid 派生在中途异常，已构造但尚未返回的 `RecipientSpec` 公钥副本可进一步统一清零；仅为非敏感公钥副本，不影响协议或安全正确性。
+16. `PublicHybridKidRouterTest` 尚未直接注入 kid derivation failure；生产实现已由统一 `catch (RuntimeException)` 映射为保留 cause 的 `INTERNAL_ERROR`，标准 JDK 下 SHA-256 不可用也难以稳定构造。
+17. `PublicHybridKidRouter.Match` 的 API 注释尚未显式说明其中两个 private-key handles 仍为 borrowed；实现从不关闭 handles，ownership 行为正确。
+18. `PublicHybridKidRouterTest` 尚未直接观察成功路由时正确长度公钥快照清零，accessor 直接抛异常的分支也未逐个断言 handle 未关闭；生产实现由统一 `finally` 清理且不存在 `close()` 调用。
 
 阶段完成时必须把仍开放的 P2 和影响写入用户报告。
