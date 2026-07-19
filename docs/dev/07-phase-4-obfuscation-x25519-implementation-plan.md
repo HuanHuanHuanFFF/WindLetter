@@ -257,7 +257,7 @@ feat(protocol): derive obfuscation x25519 key material
 - Create: windletter-protocol/src/test/java/com/windletter/protocol/recipient/ObfuscationX25519RecipientBuilderTest.java
 - Modify: docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md（仅记录 Task 2 证据）
 
-- [ ] **Step 1: 写真实 recipient 与 bucket RED**
+- [x] **Step 1: 写真实 recipient 与 bucket RED**
 
 使用真实 BC primitives，创建 3 个 recipient，断言每个真实 recipient 都能用自己的 static private key 与返回 epk 恢复同一 CEK：
 
@@ -277,7 +277,9 @@ assertEquals(8, prepared.recipients().size());
 
 每个 entry 必须只有 16-byte rid、40-byte encryptedKey、null ek；返回列表不可修改。
 
-- [ ] **Step 2: 写预验证、碰撞、随机源与关闭 RED**
+实际测试（2026-07-19）：新增真实 BC 三收件人 unwrap 同一 CEK，以及 `1/8/9/16/17/32 → 8/8/16/16/32/32` 全边界、统一 wire shape、rid 全局唯一与不可修改列表覆盖。
+
+- [x] **Step 2: 写预验证、碰撞、随机源与关闭 RED**
 
 测试必须证明：
 
@@ -292,7 +294,9 @@ assertEquals(8, prepared.recipients().size());
 - 连续两次真实 build 的 epk 和真实 rid 不复用；
 - 修改输入 public key/CEK 或 accessor 返回数组不能改变 PreparedRecipients。
 
-- [ ] **Step 3: 运行 RED**
+实际测试（2026-07-19）：覆盖预验证先于 crypto/random、单 epk/单次关闭、真实/诱饵 rid 碰撞、每诱饵 128 次上限、A256KW 与 SecureRandom failure mapping、Fisher-Yates exact bounds 与非 identity 完整排列、逐诱饵注入随机内容到 wire 的映射、连续 build 新鲜性、输入与输出深防御复制，以及 owned 临时数组清零。
+
+- [x] **Step 3: 运行 RED**
 
 ~~~powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -302,7 +306,9 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationX25519RecipientBuilderTest
 
 Expected: compilation failure，唯一原因是 ObfuscationX25519RecipientBuilder 不存在。
 
-- [ ] **Step 4: 实现 builder 深模块**
+实际 RED（2026-07-19，JDK 17）：exit 1，停在 `testCompile`，尚未进入 Surefire；全部诊断仅为缺少 `ObfuscationX25519RecipientBuilder` 及其嵌套 `PreparedRecipients`，符合预期 RED。
+
+- [x] **Step 4: 实现 builder 深模块**
 
 公开表面固定为：
 
@@ -359,7 +365,9 @@ for (int i = recipients.size() - 1; i > 0; i--) {
 }
 ~~~
 
-- [ ] **Step 5: 跑 focused 与 module gate**
+实际实现（2026-07-19）：只新增固定公开表面的 `ObfuscationX25519RecipientBuilder`；内部完成全量输入 snapshot、同 provider 单 epk、联合 rid/KEK 派生、A256KW、8/16/32 bucket、全局唯一 decoy、128 次有限重采样、完整 Fisher-Yates、异常 cause 保留、深防御性结果与 success/failure 清理。
+
+- [x] **Step 5: 跑 focused 与 module gate**
 
 ~~~powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -370,9 +378,13 @@ mvn -q -pl windletter-protocol -am test
 
 Expected: exit 0；0 failure/error/skipped；public recipient builder 无回归。
 
-- [ ] **Step 6: review、证据与提交**
+实际 GREEN（2026-07-19，JDK 17）：builder focused exit 0，20 tests，0 failure/error/skipped；三测试 focused regression exit 0，44 tests（20 + 16 + 8），0 failure/error/skipped；`mvn -q -pl windletter-protocol -am test` exit 0，511 tests（core 1 + crypto 55 + protocol 455），0 failure/error/skipped。mutation 证明：临时移除 `Collections.swap` 时只有非 identity 排列测试失败；临时丢弃随机 40-byte decoy 内容时只有随机内容映射测试失败；两次均恢复同一生产文件 SHA-256 后重跑上述 GREEN 门。
+
+- [x] **Step 6: review、证据与提交**
 
 Spec review 核对开发修订第 1、3、4、5、9 条；code/security review 核对 prevalidation-before-crypto、全局 rid 唯一、随机源、ephemeral owner 和所有异常清理。修复全部 P0/P1 后提交：
+
+实际双审（2026-07-19）：最终 spec review 与 code/security/standards review 均为 P0=0、P1=0；生产实现没有开放 P2。此前发现的三处测试门禁 P1（非 identity shuffle、随机诱饵内容来源、全部真实 wrap 早于 padding）均已补测并复审关闭；两个不影响当前生产正确性的测试 hardening P2 已登记为本计划第 11、12 项。提交前 `mvn -q test` full reactor exit 0，58 suites、549 tests，0 failure/error/skipped。本闭环只提交 builder、对应测试与本 Task 证据，不包含 `docs/README.md`，也不自动 push。
 
 ~~~text
 feat(protocol): build obfuscation x25519 recipients
@@ -1006,5 +1018,7 @@ test(protocol): close obfuscation x25519 phase
 8. 不用耗时统计证明 constant-time，也不做 shuffle/randomness 的统计分布或 benchmark；本阶段以固定长度 MessageDigest.isEqual、完整比较计数、真实新鲜性和 code review 为门禁，统计验证留到 Demo 后。
 9. Task 1 测试尚不能杀死“删除 HKDF `info.clone()`”的 future mutant；当前生产实现确实对两个 static info 做防御性复制，不影响运行正确性。影响是未来 provider 防御回归可能漏测；Demo 后在同一测试连续 derive 两轮并断言第二轮 context 完整。
 10. Task 1 防御性复制测试有两处把 `material.rid()`/`material.kek()` 临时副本直接交给断言，测试无法随后显式清零。内容是固定测试数据且不影响生产安全；后续测试 hardening 应保存为局部变量并在 finally 清理。
+11. Task 2 已验证单个诱饵连续 128 次 rid 冲突会有限失败，但尚未用极端脚本随机源证明第二个诱饵会重新获得独立的 128 次预算。当前生产计数器位于每个诱饵循环内部，协议行为正确；影响仅是未来把预算误改成全局累计时可能漏测，建议 Demo 后增加跨两个诱饵的 127 次冲突回归。
+12. Task 2 测试 fixture 仍复用可变静态 CEK，并在部分 tracking provider 中保留 synthetic CEK snapshot 到测试对象回收。现有测试已证明生产代码不修改 caller CEK 且会清零传给 provider 的 owned snapshot；影响仅是测试隔离与测试侧敏感数据卫生，建议后续改为逐测试 CEK 并在断言后集中清理 fixture snapshots。
 
 执行期间新增 P2 必须追加编号、写清影响与建议；不得用 P2 名义推迟协议、密码学、认证正确性问题。
