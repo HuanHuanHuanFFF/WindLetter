@@ -545,7 +545,7 @@ feat(protocol): recover obfuscation x25519 cek
 - Create: windletter-protocol/src/test/java/com/windletter/protocol/flow/ObfuscationX25519UnsignedMultiRecipientE2ETest.java
 - Modify: docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md（仅记录 Task 4 证据）
 
-- [ ] **Step 1: 写真实 unsigned wire RED**
+- [x] **Step 1: 写真实 unsigned wire RED**
 
 使用真实 BC 组件和 3 个真实 recipient，Sender 从 binary payload 生成 8-entry JSON wire；Receiver 只拿其中一个 private handle 即恢复：
 
@@ -571,7 +571,7 @@ assertEquals(ProtocolAuthenticationStatus.UNSIGNED, received.authenticationStatu
 
 同时覆盖 text、empty payload 和 unrelated key → NOT_FOR_ME。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 ~~~powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -581,7 +581,9 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationX25519UnsignedSenderTest,O
 
 Expected: compilation failure，唯一原因是两个 unsigned flow 不存在。
 
-- [ ] **Step 3: 实现 unsigned Sender**
+实际 RED（2026-07-21）：focused 测试首次有效运行在 test compilation 阶段失败，唯一原因是 `ObfuscationX25519UnsignedSender`、`ObfuscationX25519UnsignedReceiver` 及其嵌套 API 尚不存在；没有混入既有实现或环境失败。
+
+- [x] **Step 3: 实现 unsigned Sender**
 
 公开表面：
 
@@ -627,7 +629,7 @@ Request prevalidation/snapshot
 → finally clear CEK/IV/inner/GCM AAD and request accessor copies
 ~~~
 
-- [ ] **Step 4: 实现 unsigned Receiver 与门序 tests**
+- [x] **Step 4: 实现 unsigned Receiver 与门序 tests**
 
 公开表面：
 
@@ -678,7 +680,7 @@ strict parse + exact obfuscation/X25519/wind+inner profile
 - 测试自身为诊断或重加密制作的 owned copy 必须由测试 finally 清理，但不得把“测试清理副本”当作生产清零证据。
 - 每条成功和代表性失败路径最后都断言全部 borrowed recipient handles 仍开放。
 
-- [ ] **Step 5: 跑 focused、public regression 与 module gate**
+- [x] **Step 5: 跑 focused、public regression 与 module gate**
 
 ~~~powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -689,9 +691,13 @@ mvn -q -pl windletter-protocol -am test
 
 Expected: exit 0；真实 raw JSON round-trip 通过；public unsigned 无回归。
 
-- [ ] **Step 6: review、证据与提交**
+实际 GREEN（2026-07-21）：新增 sender 4 tests、receiver 6 tests、多收件人 E2E 2 tests，共 12 tests；连同 public X25519/Hybrid unsigned regression 共 54 tests 全绿。JDK 17 protocol dependency reactor 为 51 suites、537 tests，提交前 full reactor 为 62 suites、575 tests，均为 0 failure、0 error、0 skipped。真实 BC 三收件人生成 8-entry raw JSON，任一真实 private handle 均可恢复 binary payload；text、empty 与 unrelated key → `NOT_FOR_ME` 同时通过。
+
+- [x] **Step 6: review、证据与提交**
 
 Spec review 核对最终 recipients 进入 AAD/binding/GCM；code/security review 检查 profile、门序、清零、错误透传和无 sender static encryption identity。P0/P1 清零后提交：
+
+实际双审（2026-07-21）：独立 spec review 为 P0=0、P1=0、P2=0；独立 code/security review 为 P0=0、P1=0、P2=1。唯一 P2 是 UUIDv4、时间范围及结果字段校验在 flow 间重复，可能增加后续规则漂移的维护成本，已由 Deferred P2 第 5 项覆盖，当前不影响协议、安全或 Demo 主链，留待八组合完成后再评估共享 helper。本闭环仅提交 unsigned flow、fixture、三组测试与 Task 4 证据，排除 `docs/README.md`，也不自动 push。
 
 ~~~text
 feat(protocol): add obfuscation x25519 unsigned flow
