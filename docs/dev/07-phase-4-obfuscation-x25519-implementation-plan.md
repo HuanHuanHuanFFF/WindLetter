@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 17、Maven reactor、Bouncy Castle 1.83、Jackson、RFC 8785 JCS、JUnit 5。
 
-**Status:** 2026-07-18 Task 1 `rid/ecc + KEK` 联合派生已完成 RED/GREEN、spec review 与 code/security review，随本闭环提交；Task 2 尚未开始。
+**Status:** 2026-07-21 Task 1/2/3 已分别完成独立 RED/GREEN、spec review 与 code/security review；当前完整扫描和 CEK recovery 闭环待本次提交，Task 4 尚未开始。
 
 ---
 
@@ -398,7 +398,7 @@ feat(protocol): build obfuscation x25519 recipients
 - Create: windletter-protocol/src/test/java/com/windletter/protocol/routing/ObfuscationX25519CekRecoveryTest.java
 - Modify: docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md（仅记录 Task 3 证据）
 
-- [ ] **Step 1: 写真实恢复、完整扫描与选择 RED**
+- [x] **Step 1: 写真实恢复、完整扫描与选择 RED**
 
 真实 BC round-trip：使用 Task 2 输出的同一条 8-entry wire，分别只提供三个真实 recipient 的 local handle，均恢复原 CEK；unrelated 和 empty localKeys 为 NOT_FOR_ME。
 
@@ -421,7 +421,7 @@ assertEquals(
 - duplicate local public key 为 INTERNAL_ERROR；
 - only selected entry unwrap 一次。
 
-- [ ] **Step 2: 写 no-fallback、错误外观与清理 RED**
+- [x] **Step 2: 写 no-fallback、错误外观与清理 RED**
 
 精确断言统一攻击者错误：
 
@@ -447,7 +447,7 @@ assertNull(failure.getCause());
 - success/failure/NOT_FOR_ME 下全部 candidate rid、全部 KEK、公钥 snapshots 清零；
 - returned CEK 是 caller-owned defensive result，borrowed handles 未关闭。
 
-- [ ] **Step 3: 运行 RED**
+- [x] **Step 3: 运行 RED**
 
 ~~~powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -457,7 +457,9 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationX25519CekRecoveryTest" "-D
 
 Expected: compilation failure，唯一原因是 ObfuscationX25519CekRecovery 不存在。
 
-- [ ] **Step 4: 实现 recovery 深模块**
+实际 RED（2026-07-21）：JDK 17 focused 命令 exit 1，编译错误仅为固定 API `ObfuscationX25519CekRecovery` 尚不存在；测试文件没有其它语法或依赖错误。
+
+- [x] **Step 4: 实现 recovery 深模块**
 
 公开表面固定为：
 
@@ -508,7 +510,7 @@ if (matches && (selected == null
 }
 ~~~
 
-- [ ] **Step 5: 跑 focused 与 module gate**
+- [x] **Step 5: 跑 focused 与 module gate**
 
 ~~~powershell
 $env:JAVA_HOME='C:\Users\幻\.jdks\ms-17.0.16'
@@ -519,9 +521,13 @@ mvn -q -pl windletter-protocol -am test
 
 Expected: exit 0；统一错误的 code/message/cause 精确通过；完整扫描计数精确等于 N × M。
 
-- [ ] **Step 6: review、证据与提交**
+实际 GREEN（2026-07-21）：新增 14 个 `ObfuscationX25519CekRecoveryTest`，真实 BC builder/recovery 8-entry round-trip、首/中/尾 N × M、derive-once、wire/local tie-break、duplicate priority、only-selected unwrap、no-fallback、错误外观、borrowed ownership 与成功/失败/NOT_FOR_ME 清理路径全部通过。Task 3 focused 为 14 tests；四组相关 focused 为 56 tests；JDK 17 module reactor 为 59 suites、563 tests，均为 0 failure、0 error、0 skipped。
+
+- [x] **Step 6: review、证据与提交**
 
 Spec review 核对开发修订第 6、7、8、9 条；code/security review 检查 early-return、duplicate priority、timing comparator、no-fallback、error oracle 和所有 candidate 生命周期。P0/P1 清零后提交：
+
+实际双审（2026-07-21）：独立 spec review 与 code/security review 均为 P0=0、P1=0；确认完整 Cartesian 扫描、最小 `(wireIndex, localIndex)`、单次 selected unwrap、统一攻击者错误和全部 production-owned candidate 生命周期符合冻结规格。五项非阻塞意见中，公开错误边界与 comparator/timing 限制已由既有 P2 第 3、7、8 项覆盖；新增的 mutable-list 防御和三项测试 hardening 追加为第 13-16 项。提交前 JDK 17 full reactor 为 59 suites、563 tests，0 failure、0 error、0 skipped。本闭环只提交 recovery、对应 14-test 与本 Task 证据，排除 `docs/README.md`，也不自动 push。
 
 ~~~text
 feat(protocol): recover obfuscation x25519 cek
@@ -1020,5 +1026,9 @@ test(protocol): close obfuscation x25519 phase
 10. Task 1 防御性复制测试有两处把 `material.rid()`/`material.kek()` 临时副本直接交给断言，测试无法随后显式清零。内容是固定测试数据且不影响生产安全；后续测试 hardening 应保存为局部变量并在 finally 清理。
 11. Task 2 已验证单个诱饵连续 128 次 rid 冲突会有限失败，但尚未用极端脚本随机源证明第二个诱饵会重新获得独立的 128 次预算。当前生产计数器位于每个诱饵循环内部，协议行为正确；影响仅是未来把预算误改成全局累计时可能漏测，建议 Demo 后增加跨两个诱饵的 127 次冲突回归。
 12. Task 2 测试 fixture 仍复用可变静态 CEK，并在部分 tracking provider 中保留 synthetic CEK snapshot 到测试对象回收。现有测试已证明生产代码不修改 caller CEK 且会清零传给 provider 的 owned snapshot；影响仅是测试隔离与测试侧敏感数据卫生，建议后续改为逐测试 CEK 并在断言后集中清理 fixture snapshots。
+13. Task 3 recovery 的直接公开方法先读取原始 `recipients.size()` 再遍历同一列表；正式 Receiver 的 `WindLetter` 已冻结列表，当前 Demo 不受影响，但异常或并发可变的直接调用可能产生 TOCTOU 或泄漏集合异常。建议 Demo 后在 recovery 内先冻结列表并增加变异列表回归。
+14. Task 3 真实 BC round-trip 的三个 caller-owned recovered CEK 副本直接进入断言，未在测试侧显式清零；仅影响测试 JVM，不影响生产所有权。建议测试 hardening 时保存每轮结果并在 finally 清理。
+15. Task 3 测试可观察 candidate 副本和 provider 参数清零，但不能 mutation-kill 删除 `DerivedMaterial.close()`；源码双审已确认 recovery 最终关闭全部 material，独立 deriver 测试也证明 close 会销毁内部 rid/KEK。建议 Demo 后改为结构化 try-with-resources 或增加包内生命周期观测测试。
+16. Task 3 已覆盖第二个候选在 X25519 阶段失败时清理此前 material，但未分别锁定第二候选在 RID-HKDF 与 KEK-HKDF 子阶段失败。当前 deriver/recovery finally 路径经独立测试和双审确认正确；建议 Demo 后增加按 HKDF 调用序号失败的回归。
 
 执行期间新增 P2 必须追加编号、写清影响与建议；不得用 P2 名义推迟协议、密码学、认证正确性问题。
