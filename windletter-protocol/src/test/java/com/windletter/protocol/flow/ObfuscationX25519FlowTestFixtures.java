@@ -3,6 +3,7 @@ package com.windletter.protocol.flow;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.windletter.core.error.ErrorCode;
+import com.windletter.crypto.api.A256GcmCrypto;
 import com.windletter.crypto.api.AeadCiphertext;
 import com.windletter.crypto.api.Ed25519PrivateKeyHandle;
 import com.windletter.crypto.api.X25519PrivateKeyHandle;
@@ -27,14 +28,22 @@ import com.windletter.protocol.recipient.ObfuscationX25519RecipientBuilder;
 import com.windletter.protocol.routing.ObfuscationX25519CekRecovery;
 import com.windletter.protocol.signature.Ed25519VerificationKeyResolver;
 import com.windletter.protocol.signature.TrustedEd25519Key;
+import com.windletter.protocol.wire.Epk;
+import com.windletter.protocol.wire.ObfuscationRecipient;
+import com.windletter.protocol.wire.RecipientEntry;
 import com.windletter.protocol.wire.WindLetter;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class ObfuscationX25519FlowTestFixtures {
@@ -65,19 +74,64 @@ final class ObfuscationX25519FlowTestFixtures {
     }
 
     static void recomputeAad(ObjectNode root) {
-        root.put("aad", Base64Url.encode(JcsCanonicalizer.canonicalize(root.get("recipients"))));
+        byte[] testOwnedCanonicalRecipients =
+                JcsCanonicalizer.canonicalize(root.get("recipients"));
+        try {
+            root.put("aad", Base64Url.encode(testOwnedCanonicalRecipients));
+        } finally {
+            clear(testOwnedCanonicalRecipients);
+        }
     }
 
     static String protectedField(String wire, String name, String value) {
         ObjectNode root = object(wire);
-        byte[] bytes = Base64Url.decodeCanonical(root.get("protected").textValue(), "test.protected");
+        byte[] testOwnedProtected = Base64Url.decodeCanonical(
+                root.get("protected").textValue(), "test.protected"
+        );
+        byte[] testOwnedCanonicalProtected = null;
         try {
-            ObjectNode header = object(new String(bytes, StandardCharsets.UTF_8));
+            ObjectNode header = object(new String(
+                    testOwnedProtected, StandardCharsets.UTF_8
+            ));
             header.put(name, value);
-            root.put("protected", Base64Url.encode(JcsCanonicalizer.canonicalize(header)));
+            testOwnedCanonicalProtected = JcsCanonicalizer.canonicalize(header);
+            root.put("protected", Base64Url.encode(testOwnedCanonicalProtected));
             return json(root);
         } finally {
-            clear(bytes);
+            clear(testOwnedProtected);
+            clear(testOwnedCanonicalProtected);
+        }
+    }
+
+    static String replaceEpkX(String wire, byte[] replacement) {
+        ObjectNode root = object(wire);
+        byte[] testOwnedProtected = Base64Url.decodeCanonical(
+                root.get("protected").textValue(), "test.protected"
+        );
+        byte[] testOwnedCanonicalProtected = null;
+        try {
+            ObjectNode header = object(new String(
+                    testOwnedProtected, StandardCharsets.UTF_8
+            ));
+            ((ObjectNode) header.get("epk")).put("x", Base64Url.encode(replacement));
+            testOwnedCanonicalProtected = JcsCanonicalizer.canonicalize(header);
+            root.put("protected", Base64Url.encode(testOwnedCanonicalProtected));
+            return json(root);
+        } finally {
+            clear(testOwnedProtected);
+            clear(testOwnedCanonicalProtected);
+        }
+    }
+
+    static void flipEncodedField(ObjectNode node, String fieldName) {
+        byte[] testOwnedValue = Base64Url.decodeCanonical(
+                node.get(fieldName).textValue(), "test." + fieldName
+        );
+        try {
+            testOwnedValue[0] ^= 1;
+            node.put(fieldName, Base64Url.encode(testOwnedValue));
+        } finally {
+            clear(testOwnedValue);
         }
     }
 
@@ -116,14 +170,23 @@ final class ObfuscationX25519FlowTestFixtures {
         final Ed25519PrivateKeyHandle senderSigning = ed25519.generatePrivateKey();
         final Ed25519PrivateKeyHandle unrelatedSigning = ed25519.generatePrivateKey();
         final String signingKid = deriveSigningKid(senderSigning);
+        final String unrelatedSigningKid = deriveSigningKid(unrelatedSigning);
 
         ProtocolPayload binaryPayload() {
             return new ProtocolPayload("application/octet-stream", BINARY, BINARY.length);
         }
 
         ProtocolPayload textPayload() {
-            byte[] bytes = "WindLetter 文本".getBytes(StandardCharsets.UTF_8);
-            return new ProtocolPayload("text/plain; charset=utf-8", bytes, bytes.length);
+            byte[] testOwnedText = "WindLetter 文本".getBytes(StandardCharsets.UTF_8);
+            try {
+                return new ProtocolPayload(
+                        "text/plain; charset=utf-8",
+                        testOwnedText,
+                        testOwnedText.length
+                );
+            } finally {
+                clear(testOwnedText);
+            }
         }
 
         ProtocolPayload emptyPayload() {
@@ -157,21 +220,131 @@ final class ObfuscationX25519FlowTestFixtures {
         }
 
         TrustedEd25519Key trustedSigningKey() {
-            return new TrustedEd25519Key(IDENTITY_ID, signingKid, senderSigning.publicKey());
+            byte[] testOwnedPublicKey = senderSigning.publicKey();
+            try {
+                return new TrustedEd25519Key(
+                        IDENTITY_ID, signingKid, testOwnedPublicKey
+                );
+            } finally {
+                clear(testOwnedPublicKey);
+            }
         }
 
         String send(ProtocolPayload payload) {
-            return sender().send(new ObfuscationX25519UnsignedSender.Request(
-                    payload, MESSAGE_ID, TIMESTAMP,
-                    List.of(first.publicKey(), second.publicKey(), third.publicKey())
-            )).wireJson();
+            return send(payload, List.of(first, second, third));
         }
 
         String sendSigned(ProtocolPayload payload) {
-            return signedSender().send(new ObfuscationX25519SignedSender.Request(
-                    payload, MESSAGE_ID, TIMESTAMP, senderSigning,
-                    List.of(first.publicKey(), second.publicKey(), third.publicKey())
-            )).wireJson();
+            return sendSigned(payload, List.of(first, second, third));
+        }
+
+        String send(
+                ProtocolPayload payload,
+                List<X25519PrivateKeyHandle> recipientHandles
+        ) {
+            List<byte[]> testOwnedPublicKeys = publicKeys(recipientHandles);
+            ProductionRawReferenceRandom productionRandom =
+                    new ProductionRawReferenceRandom();
+            ProductionRawReferenceGcm productionGcm =
+                    new ProductionRawReferenceGcm(gcm);
+            try {
+                String wire = new ObfuscationX25519UnsignedSender(
+                        builder(), productionGcm, productionRandom
+                ).send(new ObfuscationX25519UnsignedSender.Request(
+                        payload, MESSAGE_ID, TIMESTAMP, testOwnedPublicKeys
+                )).wireJson();
+                assertProductionSenderCleared(productionRandom, productionGcm);
+                return wire;
+            } finally {
+                clearAll(testOwnedPublicKeys);
+            }
+        }
+
+        String sendSigned(
+                ProtocolPayload payload,
+                List<X25519PrivateKeyHandle> recipientHandles
+        ) {
+            List<byte[]> testOwnedPublicKeys = publicKeys(recipientHandles);
+            ProductionRawReferenceRandom productionRandom =
+                    new ProductionRawReferenceRandom();
+            ProductionRawReferenceGcm productionGcm =
+                    new ProductionRawReferenceGcm(gcm);
+            try {
+                String wire = new ObfuscationX25519SignedSender(
+                        builder(), productionGcm, ed25519, productionRandom
+                ).send(new ObfuscationX25519SignedSender.Request(
+                        payload, MESSAGE_ID, TIMESTAMP, senderSigning,
+                        testOwnedPublicKeys
+                )).wireJson();
+                assertProductionSenderCleared(productionRandom, productionGcm);
+                return wire;
+            } finally {
+                clearAll(testOwnedPublicKeys);
+            }
+        }
+
+        List<X25519PrivateKeyHandle> newRecipientHandles(int count) {
+            ArrayList<X25519PrivateKeyHandle> handles = new ArrayList<>(count);
+            try {
+                for (int index = 0; index < count; index++) {
+                    handles.add(x25519.generatePrivateKey());
+                }
+                return List.copyOf(handles);
+            } catch (RuntimeException failure) {
+                closeHandles(handles);
+                throw failure;
+            }
+        }
+
+        List<RealRecipientPosition> realRecipientsInWireOrder(
+                String wire,
+                List<X25519PrivateKeyHandle> handles
+        ) {
+            WindLetter parsed = new JacksonOuterWireParser().parse(wire);
+            Epk epk = (Epk) parsed.protectedHeader().senderInfo();
+            byte[] testOwnedEpk = epk.x();
+            ArrayList<RealRecipientPosition> positions = new ArrayList<>(handles.size());
+            try {
+                ObfuscationX25519KeyDeriver deriver =
+                        new ObfuscationX25519KeyDeriver(x25519, hkdf);
+                for (X25519PrivateKeyHandle handle : handles) {
+                    byte[] testOwnedTargetRid = null;
+                    try (ObfuscationX25519KeyDeriver.DerivedMaterial material =
+                                 deriver.derive(handle, testOwnedEpk)) {
+                        testOwnedTargetRid = material.rid();
+                        int match = -1;
+                        int matches = 0;
+                        for (int wireIndex = 0;
+                             wireIndex < parsed.recipients().size(); wireIndex++) {
+                            RecipientEntry entry = parsed.recipients().get(wireIndex);
+                            ObfuscationRecipient recipient =
+                                    (ObfuscationRecipient) entry;
+                            byte[] testOwnedWireRid = recipient.rid();
+                            try {
+                                if (MessageDigest.isEqual(
+                                        testOwnedTargetRid, testOwnedWireRid
+                                )) {
+                                    match = wireIndex;
+                                    matches++;
+                                }
+                            } finally {
+                                clear(testOwnedWireRid);
+                            }
+                        }
+                        assertEquals(1, matches,
+                                "each real recipient rid must occur exactly once");
+                        positions.add(new RealRecipientPosition(match, handle));
+                    } finally {
+                        clear(testOwnedTargetRid);
+                    }
+                }
+                positions.sort(Comparator.comparingInt(
+                        RealRecipientPosition::wireIndex
+                ));
+                return List.copyOf(positions);
+            } finally {
+                clear(testOwnedEpk);
+            }
         }
 
         ObfuscationX25519UnsignedReceiver.Request request(
@@ -191,44 +364,74 @@ final class ObfuscationX25519FlowTestFixtures {
 
         String authenticatedWire(String originalWire, byte[] innerBytes) {
             WindLetter parsed = new JacksonOuterWireParser().parse(originalWire);
-            byte[] cek = recovery().recover(
+            byte[] testOwnedCek = recovery().recover(
                     (com.windletter.protocol.wire.Epk) parsed.protectedHeader().senderInfo(),
                     parsed.recipients(), List.of(second)
             );
-            byte[] aad = new OuterAad().gcmInput(parsed.protectedValue(), parsed.aad());
-            byte[] iv = parsed.iv();
+            byte[] testOwnedAad = new OuterAad().gcmInput(
+                    parsed.protectedValue(), parsed.aad()
+            );
+            byte[] testOwnedIv = parsed.iv();
+            byte[] testOwnedCiphertext = null;
+            byte[] testOwnedTag = null;
             try {
-                AeadCiphertext encrypted = gcm.encrypt(cek, iv, aad, innerBytes);
+                AeadCiphertext encrypted = gcm.encrypt(
+                        testOwnedCek, testOwnedIv, testOwnedAad, innerBytes
+                );
+                testOwnedCiphertext = encrypted.ciphertext();
+                testOwnedTag = encrypted.tag();
                 return new JacksonOuterWireWriter().write(new WindLetter(
                         parsed.protectedHeader(), parsed.protectedValue(), parsed.aad(),
-                        parsed.recipients(), iv, encrypted.ciphertext(), encrypted.tag()
+                        parsed.recipients(), testOwnedIv,
+                        testOwnedCiphertext, testOwnedTag
                 ));
             } finally {
-                clear(cek);
-                clear(aad);
-                clear(iv);
+                clear(testOwnedCek);
+                clear(testOwnedAad);
+                clear(testOwnedIv);
+                clear(testOwnedCiphertext);
+                clear(testOwnedTag);
             }
         }
 
         String bindingFailure(String originalWire) {
-            byte[] inner = new UnsignedInnerCodec().encode(new UnsignedInnerCodec.Message(
-                    MESSAGE_ID, TIMESTAMP, binaryPayload(),
-                    new OuterBinding.Hashes(new byte[32], new byte[32])
-            ));
+            byte[] testOwnedWrongProtectedHash = new byte[32];
+            byte[] testOwnedWrongRecipientsHash = new byte[32];
+            byte[] inner = new UnsignedInnerCodec().encode(
+                    new UnsignedInnerCodec.Message(
+                            MESSAGE_ID, TIMESTAMP, binaryPayload(),
+                            new OuterBinding.Hashes(
+                                    testOwnedWrongProtectedHash,
+                                    testOwnedWrongRecipientsHash
+                            )
+                    )
+            );
             try {
                 return authenticatedWire(originalWire, inner);
             } finally {
+                clear(testOwnedWrongProtectedHash);
+                clear(testOwnedWrongRecipientsHash);
                 clear(inner);
             }
         }
 
         String signedBindingFailure(String originalWire) {
-            return authenticatedSignedWire(
-                    originalWire,
-                    new OuterBinding.Hashes(new byte[32], new byte[32]),
-                    signingKid,
-                    senderSigning
-            );
+            byte[] testOwnedWrongProtectedHash = new byte[32];
+            byte[] testOwnedWrongRecipientsHash = new byte[32];
+            try {
+                return authenticatedSignedWire(
+                        originalWire,
+                        new OuterBinding.Hashes(
+                                testOwnedWrongProtectedHash,
+                                testOwnedWrongRecipientsHash
+                        ),
+                        signingKid,
+                        senderSigning
+                );
+            } finally {
+                clear(testOwnedWrongProtectedHash);
+                clear(testOwnedWrongRecipientsHash);
+            }
         }
 
         String authenticatedSignedWire(
@@ -237,23 +440,92 @@ final class ObfuscationX25519FlowTestFixtures {
                 String kid,
                 Ed25519PrivateKeyHandle signingKey
         ) {
-            byte[] signature = null;
-            byte[] inner = null;
-            try (SignedInnerCodec.Prepared prepared = new SignedInnerCodec().prepare(
-                    new SignedInnerCodec.Message(
-                            MESSAGE_ID, TIMESTAMP, binaryPayload(), binding, kid
-                    ))) {
-                byte[] signingInput = prepared.signingInput();
-                try {
-                    signature = ed25519.sign(signingKey, signingInput);
-                } finally {
-                    clear(signingInput);
-                }
-                inner = new SignedInnerCodec().assemble(prepared, signature);
-                return authenticatedWire(originalWire, inner);
+            byte[] testOwnedInner = signedInner(binding, kid, signingKey);
+            try {
+                return authenticatedWire(originalWire, testOwnedInner);
             } finally {
-                clear(signature);
-                clear(inner);
+                clear(testOwnedInner);
+            }
+        }
+
+        String authenticatedFlippedSignature(String originalWire) {
+            byte[] testOwnedValidInner = validSignedInner(
+                    originalWire, signingKid, senderSigning
+            );
+            byte[] testOwnedSignature = null;
+            byte[] testOwnedMaliciousInner = null;
+            try {
+                ObjectNode inner = object(new String(
+                        testOwnedValidInner, StandardCharsets.UTF_8
+                ));
+                testOwnedSignature = Base64Url.decodeCanonical(
+                        inner.get("signature").textValue(), "test.inner.signature"
+                );
+                testOwnedSignature[0] ^= 1;
+                inner.put("signature", Base64Url.encode(testOwnedSignature));
+                testOwnedMaliciousInner = JcsCanonicalizer.canonicalize(inner);
+                return authenticatedWire(originalWire, testOwnedMaliciousInner);
+            } finally {
+                clear(testOwnedValidInner);
+                clear(testOwnedSignature);
+                clear(testOwnedMaliciousInner);
+            }
+        }
+
+        String authenticatedUnknownSigner(String originalWire) {
+            WindLetter parsed = new JacksonOuterWireParser().parse(originalWire);
+            return authenticatedSignedWire(
+                    originalWire,
+                    new OuterBinding().compute(
+                            parsed.protectedHeader(), parsed.recipients()
+                    ),
+                    unrelatedSigningKid,
+                    unrelatedSigning
+            );
+        }
+
+        String authenticatedChangedSignedSegment(
+                String originalWire,
+                String segment
+        ) {
+            if (!"protected".equals(segment) && !"payload".equals(segment)) {
+                throw new IllegalArgumentException(
+                        "segment must be protected or payload"
+                );
+            }
+            byte[] testOwnedValidInner = validSignedInner(
+                    originalWire, signingKid, senderSigning
+            );
+            byte[] testOwnedSegment = null;
+            byte[] testOwnedCanonicalSegment = null;
+            byte[] testOwnedMaliciousInner = null;
+            try {
+                ObjectNode inner = object(new String(
+                        testOwnedValidInner, StandardCharsets.UTF_8
+                ));
+                testOwnedSegment = Base64Url.decodeCanonical(
+                        inner.get(segment).textValue(), "test.inner." + segment
+                );
+                ObjectNode decoded = object(new String(
+                        testOwnedSegment, StandardCharsets.UTF_8
+                ));
+                if ("protected".equals(segment)) {
+                    decoded.put("ts", TIMESTAMP + 1);
+                } else {
+                    ((ObjectNode) decoded.get("meta")).put(
+                            "content_type",
+                            "application/vnd.windletter.changed+binary"
+                    );
+                }
+                testOwnedCanonicalSegment = JcsCanonicalizer.canonicalize(decoded);
+                inner.put(segment, Base64Url.encode(testOwnedCanonicalSegment));
+                testOwnedMaliciousInner = JcsCanonicalizer.canonicalize(inner);
+                return authenticatedWire(originalWire, testOwnedMaliciousInner);
+            } finally {
+                clear(testOwnedValidInner);
+                clear(testOwnedSegment);
+                clear(testOwnedCanonicalSegment);
+                clear(testOwnedMaliciousInner);
             }
         }
 
@@ -301,6 +573,45 @@ final class ObfuscationX25519FlowTestFixtures {
             }
         }
 
+        private byte[] validSignedInner(
+                String originalWire,
+                String kid,
+                Ed25519PrivateKeyHandle signingKey
+        ) {
+            WindLetter parsed = new JacksonOuterWireParser().parse(originalWire);
+            return signedInner(
+                    new OuterBinding().compute(
+                            parsed.protectedHeader(), parsed.recipients()
+                    ),
+                    kid,
+                    signingKey
+            );
+        }
+
+        private byte[] signedInner(
+                OuterBinding.Hashes binding,
+                String kid,
+                Ed25519PrivateKeyHandle signingKey
+        ) {
+            byte[] testOwnedSigningInput = null;
+            byte[] testOwnedSignature = null;
+            try (SignedInnerCodec.Prepared prepared =
+                         new SignedInnerCodec().prepare(new SignedInnerCodec.Message(
+                                 MESSAGE_ID, TIMESTAMP, binaryPayload(), binding, kid
+                         ))) {
+                testOwnedSigningInput = prepared.signingInput();
+                testOwnedSignature = ed25519.sign(
+                        signingKey, testOwnedSigningInput
+                );
+                return new SignedInnerCodec().assemble(
+                        prepared, testOwnedSignature
+                );
+            } finally {
+                clear(testOwnedSigningInput);
+                clear(testOwnedSignature);
+            }
+        }
+
         @Override
         public void close() {
             unrelatedSigning.close();
@@ -318,6 +629,102 @@ final class ObfuscationX25519FlowTestFixtures {
             } finally {
                 clear(publicKey);
             }
+        }
+
+        private static List<byte[]> publicKeys(
+                List<X25519PrivateKeyHandle> handles
+        ) {
+            ArrayList<byte[]> publicKeys = new ArrayList<>(handles.size());
+            try {
+                for (X25519PrivateKeyHandle handle : handles) {
+                    publicKeys.add(handle.publicKey());
+                }
+                return publicKeys;
+            } catch (RuntimeException failure) {
+                clearAll(publicKeys);
+                throw failure;
+            }
+        }
+
+        private static void assertProductionSenderCleared(
+                ProductionRawReferenceRandom random,
+                ProductionRawReferenceGcm gcm
+        ) {
+            assertEquals(2, random.productionRawReferences.size());
+            assertEquals(4, gcm.productionRawReferences.size());
+            for (byte[] reference : random.productionRawReferences) {
+                assertNotNull(reference);
+                assertTrue(allZero(reference),
+                        "sender-owned random output was not cleared");
+            }
+            for (byte[] reference : gcm.productionRawReferences) {
+                assertNotNull(reference);
+                assertTrue(allZero(reference),
+                        "sender-owned GCM input was not cleared");
+            }
+        }
+    }
+
+    record RealRecipientPosition(
+            int wireIndex,
+            X25519PrivateKeyHandle handle
+    ) {
+    }
+
+    static void closeHandles(List<X25519PrivateKeyHandle> handles) {
+        for (int index = handles.size() - 1; index >= 0; index--) {
+            handles.get(index).close();
+        }
+    }
+
+    private static void clearAll(List<byte[]> values) {
+        if (values != null) {
+            for (byte[] value : values) clear(value);
+        }
+    }
+
+    private static final class ProductionRawReferenceRandom extends SecureRandom {
+        private final SecureRandom delegate = new SecureRandom();
+        private final ArrayList<byte[]> productionRawReferences = new ArrayList<>();
+
+        @Override
+        public void nextBytes(byte[] bytes) {
+            delegate.nextBytes(bytes);
+            productionRawReferences.add(bytes);
+        }
+    }
+
+    private static final class ProductionRawReferenceGcm implements A256GcmCrypto {
+        private final A256GcmCrypto delegate;
+        private final ArrayList<byte[]> productionRawReferences = new ArrayList<>();
+
+        private ProductionRawReferenceGcm(A256GcmCrypto delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public AeadCiphertext encrypt(
+                byte[] key,
+                byte[] iv,
+                byte[] aad,
+                byte[] plaintext
+        ) {
+            productionRawReferences.add(key);
+            productionRawReferences.add(iv);
+            productionRawReferences.add(aad);
+            productionRawReferences.add(plaintext);
+            return delegate.encrypt(key, iv, aad, plaintext);
+        }
+
+        @Override
+        public byte[] decrypt(
+                byte[] key,
+                byte[] iv,
+                byte[] aad,
+                byte[] ciphertext,
+                byte[] tag
+        ) {
+            return delegate.decrypt(key, iv, aad, ciphertext, tag);
         }
     }
 

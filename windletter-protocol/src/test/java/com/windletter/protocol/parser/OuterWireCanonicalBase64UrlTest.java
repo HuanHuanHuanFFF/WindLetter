@@ -93,6 +93,29 @@ class OuterWireCanonicalBase64UrlTest {
         assertMalformed(outer);
     }
 
+    @Test
+    void rejectsNonCanonicalPaddedAndIllegalAlphabetProtectedEpkXEncodings() {
+        for (String malformed : malformedCanonicalVariants(bytes(32, 17))) {
+            ObjectNode outer = validObfuscationOuter();
+            ObjectNode header = decodeProtected(outer);
+            ((ObjectNode) header.get("epk")).put("x", malformed);
+            outer.put("protected", b64(toJson(header).getBytes(StandardCharsets.UTF_8)));
+
+            assertMalformed(outer);
+        }
+    }
+
+    @Test
+    void rejectsNonCanonicalPaddedAndIllegalAlphabetObfuscationRidEncodings() {
+        for (String malformed : malformedCanonicalVariants(bytes(16, 18))) {
+            ObjectNode outer = validObfuscationOuter();
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            recipient.put("rid", malformed);
+
+            assertMalformed(outer);
+        }
+    }
+
     private void assertMalformed(ObjectNode outer) {
         ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
         assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
@@ -123,6 +146,36 @@ class OuterWireCanonicalBase64UrlTest {
         return outer;
     }
 
+    private static ObjectNode validObfuscationOuter() {
+        ObjectNode header = MAPPER.createObjectNode()
+                .put("typ", "wind+jwe")
+                .put("cty", "wind+inner")
+                .put("ver", "1.0")
+                .put("wind_mode", "obfuscation")
+                .put("enc", "A256GCM")
+                .put("key_alg", "X25519");
+        header.set("epk", MAPPER.createObjectNode()
+                .put("kty", "OKP")
+                .put("crv", "X25519")
+                .put("x", b64(bytes(32, 9))));
+
+        ArrayNode recipients = MAPPER.createArrayNode();
+        for (int i = 0; i < 8; i++) {
+            recipients.add(MAPPER.createObjectNode()
+                    .put("rid", b64(bytes(16, 20 + i)))
+                    .put("encrypted_key", b64(bytes(40, 30 + i))));
+        }
+
+        ObjectNode outer = MAPPER.createObjectNode();
+        outer.put("protected", b64(toJson(header).getBytes(StandardCharsets.UTF_8)));
+        outer.put("aad", b64(bytes(1, 4)));
+        outer.set("recipients", recipients);
+        outer.put("iv", b64(bytes(12, 5)));
+        outer.put("ciphertext", b64(bytes(24, 6)));
+        outer.put("tag", b64(bytes(16, 7)));
+        return outer;
+    }
+
     private static ObjectNode decodeProtected(ObjectNode outer) {
         try {
             return (ObjectNode) MAPPER.readTree(Base64.getUrlDecoder().decode(outer.get("protected").asText()));
@@ -142,6 +195,15 @@ class OuterWireCanonicalBase64UrlTest {
             throw new IllegalArgumentException("fixture is not Base64URL");
         }
         return canonical.substring(0, lastIndex) + BASE64_URL_ALPHABET.charAt(alphabetIndex + 1);
+    }
+
+    private static String[] malformedCanonicalVariants(byte[] value) {
+        String canonical = b64(value);
+        return new String[]{
+                nonCanonicalAlias(canonical),
+                canonical + "=",
+                "+" + canonical.substring(1)
+        };
     }
 
     private static byte[] bytes(int length, int seed) {

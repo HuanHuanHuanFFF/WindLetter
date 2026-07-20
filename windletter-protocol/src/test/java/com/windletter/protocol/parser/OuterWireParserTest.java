@@ -375,12 +375,14 @@ class OuterWireParserTest {
 
     @Test
     void malformedBeatsUnknownRecipientFieldInBranch() {
-        ObjectNode outer = validOuter("public", "X25519", "wind+jws");
-        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
-        recipient.put("encrypted_key", "bad==");
-        recipient.put("unknown", "x");
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+        for (String windMode : new String[]{"public", "obfuscation"}) {
+            ObjectNode outer = validOuter(windMode, "X25519", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            recipient.put("encrypted_key", "bad==");
+            recipient.put("unknown", "x");
+            ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
+            assertEquals(ErrorCode.MALFORMED_WIRE, ex.errorCode());
+        }
     }
 
     @Test
@@ -442,22 +444,92 @@ class OuterWireParserTest {
     }
 
     @Test
-    void rejectsInvalidRidLength() {
-        ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
-        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
-        recipient.put("rid", b64(bytes(15, 3)));
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+    void rejectsInvalidRidLengths() {
+        for (int length : new int[]{15, 17}) {
+            ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            recipient.put("rid", b64(bytes(length, 3)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
     }
 
     @Test
-    void rejectsInvalidEpkXLength() {
+    void rejectsInvalidEpkXLengths() {
+        for (int length : new int[]{31, 33}) {
+            ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
+            ObjectNode protectedHeader = decodeProtected(outer.get("protected").asText());
+            ((ObjectNode) protectedHeader.get("epk")).put("x", b64(bytes(length, 4)));
+            outer.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
+    }
+
+    @Test
+    void rejectsMissingObfuscationEpkAndRequiredMembersAsInvalidFields() {
+        ObjectNode withoutEpk = validOuter("obfuscation", "X25519", "wind+jws");
+        ObjectNode protectedHeader = decodeProtected(withoutEpk.get("protected").asText());
+        protectedHeader.remove("epk");
+        withoutEpk.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+        assertCode(ErrorCode.INVALID_FIELD, withoutEpk);
+
+        for (String field : new String[]{"kty", "crv", "x"}) {
+            ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
+            protectedHeader = decodeProtected(outer.get("protected").asText());
+            ((ObjectNode) protectedHeader.get("epk")).remove(field);
+            outer.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
+    }
+
+    @Test
+    void rejectsUnknownAndWrongSemanticObfuscationEpkValuesAsInvalidFields() {
+        for (String[] invalid : new String[][]{
+                {"kty", "UNKNOWN"},
+                {"kty", "EC"},
+                {"crv", "UNKNOWN"},
+                {"crv", "Ed25519"}
+        }) {
+            ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
+            ObjectNode protectedHeader = decodeProtected(outer.get("protected").asText());
+            ((ObjectNode) protectedHeader.get("epk")).put(invalid[0], invalid[1]);
+            outer.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
+    }
+
+    @Test
+    void rejectsWrongJsonTypesForObfuscationEpkAndMembersAsMalformed() {
+        ObjectNode wrongEpkType = validOuter("obfuscation", "X25519", "wind+jws");
+        ObjectNode protectedHeader = decodeProtected(wrongEpkType.get("protected").asText());
+        protectedHeader.put("epk", "wrong");
+        wrongEpkType.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+        assertCode(ErrorCode.MALFORMED_WIRE, wrongEpkType);
+
+        for (String field : new String[]{"kty", "crv", "x"}) {
+            ObjectNode nullMember = validOuter("obfuscation", "X25519", "wind+jws");
+            protectedHeader = decodeProtected(nullMember.get("protected").asText());
+            ((ObjectNode) protectedHeader.get("epk")).putNull(field);
+            nullMember.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+            assertCode(ErrorCode.MALFORMED_WIRE, nullMember);
+
+            ObjectNode objectMember = validOuter("obfuscation", "X25519", "wind+jws");
+            protectedHeader = decodeProtected(objectMember.get("protected").asText());
+            ((ObjectNode) protectedHeader.get("epk")).putObject(field).put("wrong", true);
+            objectMember.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
+            assertCode(ErrorCode.MALFORMED_WIRE, objectMember);
+        }
+    }
+
+    @Test
+    void malformedObfuscationEpkXBeatsUnknownEpkField() {
         ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
         ObjectNode protectedHeader = decodeProtected(outer.get("protected").asText());
-        ((ObjectNode) protectedHeader.get("epk")).put("x", b64(bytes(31, 4)));
+        ObjectNode epk = (ObjectNode) protectedHeader.get("epk");
+        epk.put("x", "bad==");
+        epk.put("unknown", "x");
         outer.put("protected", b64(toJson(protectedHeader).getBytes(StandardCharsets.UTF_8)));
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+
+        assertCode(ErrorCode.MALFORMED_WIRE, outer);
     }
 
     @Test
@@ -492,12 +564,13 @@ class OuterWireParserTest {
     }
 
     @Test
-    void rejectsInvalidEncryptedKeyLength() {
-        ObjectNode outer = validOuter("public", "X25519", "wind+jws");
-        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
-        recipient.put("encrypted_key", b64(bytes(39, 8)));
-        ProtocolException ex = assertThrows(ProtocolException.class, () -> parser.parse(toJson(outer)));
-        assertEquals(ErrorCode.INVALID_FIELD, ex.errorCode());
+    void rejectsInvalidEncryptedKeyLengths() {
+        for (int length : new int[]{39, 41}) {
+            ObjectNode outer = validOuter("public", "X25519", "wind+jws");
+            ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+            recipient.put("encrypted_key", b64(bytes(length, 8)));
+            assertCode(ErrorCode.INVALID_FIELD, outer);
+        }
     }
 
     @Test
@@ -534,6 +607,15 @@ class OuterWireParserTest {
         ObjectNode recipient = (ObjectNode) withEk.withArray("recipients").get(0);
         recipient.put("ek", b64(bytes(1088, 12)));
         assertCode(ErrorCode.INVALID_FIELD, withEk);
+    }
+
+    @Test
+    void rejectsObfuscationX25519RecipientWithEk() {
+        ObjectNode outer = validOuter("obfuscation", "X25519", "wind+jws");
+        ObjectNode recipient = (ObjectNode) outer.withArray("recipients").get(0);
+        recipient.put("ek", b64(bytes(1088, 12)));
+
+        assertCode(ErrorCode.INVALID_FIELD, outer);
     }
 
     @Test
