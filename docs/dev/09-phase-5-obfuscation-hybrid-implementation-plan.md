@@ -4,7 +4,7 @@
 
 **Architecture:** 新增 Hybrid obfuscation 专用联合派生、recipient builder、full-scan CEK recovery 和四条 flow。复用现有 wire/AAD/binding/inner/crypto 基础，但不修改已封板的 public 与 Obfuscation X25519 主链，不提前抽取通用算法框架。
 
-**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1 已实现并通过提交前门禁，Task 2 开始执行。
+**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1 已提交，Task 2 已实现并通过提交前门禁，Task 3 开始执行。
 
 ## 1. 执行基线与硬约束
 
@@ -289,6 +289,14 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationHybridRecipientBuilderTest
 ```text
 feat(protocol): build obfuscation hybrid recipients
 ```
+
+### 5.4 实际证据（2026-07-21）
+
+- RED：`ObfuscationHybridRecipientKeys` 与 `ObfuscationHybridRecipientBuilder` 不存在，focused 测试按预期编译失败。
+- GREEN：新测试 14 cases，覆盖真实 BC 三收件人、单 EPK、逐 pair 独立 encapsulation/ek、完整 pair 判重、共享单 component、全部 bucket、真实项先于诱饵、Hybrid 三字段随机诱饵、全局 rid 唯一、每诱饵独立 128 次预算、Fisher-Yates、失败清理与 immutable final snapshots。
+- focused 四套件 58 tests 通过；`windletter-protocol` 及依赖 reactor 通过。
+- 两路独立 spec/test 与 code/security review：生产 P0=0、P1=0；随机诱饵字段进入 wire 与每诱饵独立重采样预算两个测试缺口已补齐。
+- 范围保持为 key-pair value object、builder、test 与本计划证据，不包含 receiver routing 或 flow。
 
 ## 6. Task 3：完整扫描与单次 CEK recovery
 
@@ -593,3 +601,6 @@ test(protocol): close obfuscation hybrid phase
 6. **四条 flow 的 immutable 临时数据清理边界**：Java `String`/record 中的公开 wire 数据不能主动清除；不含 private key，但会增加短期内存副本。Demo 后评估更窄生命周期。
 7. **Task 1 长度与恶意 provider 测试穷举**：核心 null/短/长和关键 mutation 已覆盖，但尚未穷举每个 primitive/HKDF 输出的全部 null、±1 组合，也未逐一验证 provider 修改 public EPK/EK 参数。当前生产输入均 defensive clone、输出均精确验长；影响是测试完备性而非已知协议错误，Task 6 tamper/strict 封板后再补 mutation matrix。
 8. **Task 1 测试 helper 重复**：单个 deriver 测试文件较长；只影响维护成本。阶段完成后与其它 profile fixture 一并抽取，不在主链中提前建设 testkit。
+9. **Task 2 异常 List 快照 hardening**：普通稳定列表会在 crypto 前完整验证和复制；恶意或并发变化的自定义 `List` 可能使初始 `size()` 与迭代项数不一致。影响限本地调用方合同，不是远程协议漏洞；Demo 后可先 `List.copyOf` 再统一验数验项。
+10. **Task 2 provider 重复 `ek` 灾难检测**：每个真实 pair 已独立调用 encapsulation，正常 BC 与测试均证明 `ek` 独立；builder 不额外拒绝底层 RNG/provider 灾难性重复的 1088-byte ciphertext。Demo 后可加入 per-message `ek` 唯一性防御。
+11. **Task 2 failure-path 穷举**：尚未直接测试 ephemeral public key null/错长、A256KW null/39/41-byte 输出及 shuffle `nextInt` 失败；生产长度校验与 finally 路径已审查正确。影响为回归覆盖完整性，Task 6 或 Demo 后补 mutation matrix。
