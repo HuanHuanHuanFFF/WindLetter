@@ -1,6 +1,6 @@
 # WindLetter Phase 5：Obfuscation Hybrid 设计
 
-> 状态：2026-07-21 审计完成，协议歧义已通过 v1.0 末尾“开发修订”冻结；等待实施计划闭环后进入生产代码。
+> 状态：2026-07-21 审计、协议修订与设计复审完成；详细实施计划见 `docs/dev/09-phase-5-obfuscation-hybrid-implementation-plan.md`，下一闭环为 Task 1 联合派生。
 
 ## 1. 目标与范围
 
@@ -236,7 +236,8 @@ E2E 门禁：
 4. Hybrid recipient builder。
 5. Hybrid full-scan CEK recovery。
 6. unsigned 完整收发。
-7. signed 完整收发 + 八组合 strict/tamper/randomness 封板。
+7. signed 完整收发。
+8. 八组合 text/binary、strict、tamper、randomness 与阶段封板。
 
 每个闭环按 RED → GREEN → focused/module gate → spec review → code/security review → 独立 commit 执行。P0/P1 阻塞下一闭环；P2 记录但不阻塞 Demo。
 
