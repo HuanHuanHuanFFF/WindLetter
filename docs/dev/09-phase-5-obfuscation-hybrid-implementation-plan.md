@@ -4,7 +4,7 @@
 
 **Architecture:** 新增 Hybrid obfuscation 专用联合派生、recipient builder、full-scan CEK recovery 和四条 flow。复用现有 wire/AAD/binding/inner/crypto 基础，但不修改已封板的 public 与 Obfuscation X25519 主链，不提前抽取通用算法框架。
 
-**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；本计划冻结后从 Task 1 开始按闭环执行。
+**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1 已实现并通过提交前门禁，Task 2 开始执行。
 
 ## 1. 执行基线与硬约束
 
@@ -223,6 +223,15 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationHybridKeyDeriverTest,Obfus
 ```text
 feat(protocol): derive obfuscation hybrid key material
 ```
+
+### 4.4 实际证据（2026-07-21）
+
+- 初始 RED：测试因 `ObfuscationHybridKeyDeriver` 不存在而编译失败。
+- 安全 RED：恶意 HKDF provider 修改第一次 IKM 后，第二次调用未看到原始 `Z`；实现改为两次 HKDF 各用独立副本并在调用后清零。
+- GREEN：新测试类 17 tests，覆盖真实 BC sender/receiver、一致向量、sender 失败、receiver dummy/failure flag、provider contract、closed/foreign X25519 与 ML-KEM handle、生命周期和清零。
+- focused 三套件通过；`windletter-protocol` 及依赖 reactor 通过。
+- 独立 spec/test review 与 code/security review：生产 P0=0、P1=0；两个测试合同缺口（dummy rid 相等仍失败、ML-KEM closed/foreign 分类）已补齐。
+- 范围保持为 deriver/test/本计划证据，不包含 wrap、padding、routing 或 flow。
 
 ## 5. Task 2：Per-entry Hybrid recipient builder
 
@@ -582,3 +591,5 @@ test(protocol): close obfuscation hybrid phase
 4. **testkit 迁移**：`windletter-testkit` 当前无 `src`，本阶段不为共享 fixture 扩大基础设施；Phase 6/7 再建立跨模块 public-surface matrix。
 5. **API 错误映射与 key lease**：protocol 内部细分错误保留；Phase 6 必须将除 `NOT_FOR_ME` 外的无效消息统一为 `InvalidMessage`，并由 API lease 负责关闭完整 Hybrid handle pair。
 6. **四条 flow 的 immutable 临时数据清理边界**：Java `String`/record 中的公开 wire 数据不能主动清除；不含 private key，但会增加短期内存副本。Demo 后评估更窄生命周期。
+7. **Task 1 长度与恶意 provider 测试穷举**：核心 null/短/长和关键 mutation 已覆盖，但尚未穷举每个 primitive/HKDF 输出的全部 null、±1 组合，也未逐一验证 provider 修改 public EPK/EK 参数。当前生产输入均 defensive clone、输出均精确验长；影响是测试完备性而非已知协议错误，Task 6 tamper/strict 封板后再补 mutation matrix。
+8. **Task 1 测试 helper 重复**：单个 deriver 测试文件较长；只影响维护成本。阶段完成后与其它 profile fixture 一并抽取，不在主链中提前建设 testkit。
