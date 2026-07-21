@@ -1010,3 +1010,32 @@ Wind Letter v1.0 对混淆模式作如下修订：
 9. 实现必须在成功与失败路径关闭每消息临时 X25519 私钥，并清除 X25519 shared secret、候选 `rid`、KEK、CEK、inner 和 GCM AAD 等调用方拥有的敏感临时数组。
 
 本修订不改变 wire 字段或算法白名单，也不在阶段 4 引入 Obfuscation Hybrid。Hybrid 的逐 entry `ek`、`rid/hybrid` 和 1088 字节诱饵将在后续阶段按正文既有规则实现。
+
+### 2026-07-21：明确 Obfuscation Hybrid 原子身份、完整扫描与失败语义
+
+开发 `obfuscation + X25519ML-KEM-768` 主链时发现：正文已经定义逐收件人 `ek`、`rid/hybrid` 与 Hybrid 诱饵长度，但没有完整冻结本地 X25519/ML-KEM 身份的配对方式、逐 entry 解封装的完整扫描、多个命中的选择规则，以及 ML-KEM 隐式拒绝与 `NotForMe` 的边界。若实现各自选择，可能发生跨身份拼接、提前结束扫描、错误回退或可观察的解封装 oracle。
+
+Wind Letter v1.0 对 Obfuscation Hybrid 作如下修订：
+
+1. 每个真实收件人和每个本地接收身份都必须是不可拆分的 `(X25519, ML-KEM-768)` 完整密钥对。Sender 和 Receiver 必须拒绝重复的完整 pair；允许不同 pair 复用其中一个 component，但不得把两条本地记录交叉拼成新的身份。对于 `key_alg="X25519ML-KEM-768"`，本项取代 2026-07-18 修订第 6 项中按单一 X25519 公钥判重的要求；该旧要求只适用于 `key_alg="X25519"`。
+2. 每条 outer message 必须生成一把新的 X25519 临时密钥对；该消息全部真实 Hybrid 收件人共享同一个 `protected.epk`。每个真实收件人必须独立执行一次 ML-KEM-768 encapsulation，不得跨 entry 复用 `ek`、`SS_PQ` 或 KEK。
+3. 对每个真实 entry，必须使用同一次 encapsulation 得到的材料按以下顺序联合派生：
+
+   $$Z=SS_{ECC}\ ||\ SS_{PQ}$$
+
+   $$rid=\mathrm{HKDF\text{-}SHA256}(salt=\mathrm{UTF8}("wind"),IKM=Z,info=\mathrm{UTF8}("rid/hybrid"),L=16)$$
+
+   $$KEK=\mathrm{HKDF\text{-}SHA256}(salt=\mathrm{UTF8}("wind"),IKM=Z,info=\mathrm{UTF8}("WindLetter\ v1\ KEK\ |\ X25519ML\text{-}KEM\text{-}768"),L=32)$$
+
+   `rid` 与 KEK 必须来自同一个 `Z`，且 `SS_ECC` 必须在前、`SS_PQ` 必须在后。`rid` 只能用于路由比较，不得作为加密密钥。
+4. Sender 必须先构造全部真实 entry，再填充到最小的 `{8,16,32}` 桶。Hybrid 诱饵 entry 必须含随机 16 字节 `rid`、随机 1088 字节 `ek` 和随机 40 字节 `encrypted_key`，且不得含 `kid`。最终 wire 中所有 `rid` 必须唯一；真实 entry 冲突必须失败，每个诱饵的 `rid` 最多独立重采样 128 次。
+5. 真实 entry 与诱饵 entry 合并后，Sender 必须使用 CSPRNG 执行无偏 Fisher-Yates shuffle。只有最终 `protected` 与最终 recipients 顺序冻结后，才允许计算 outer AAD、两项 inner/outer binding、signed inner 的签名和 AES-GCM。
+6. Receiver 必须先完成 strict wire/profile 校验和 outer AAD 一致性校验，并在读取本地 private-key handle 前拒绝重复 wire `rid`。本地完整 pair 必须先验证、制作稳定输入快照并拒绝重复记录。
+7. 对每个不同的本地完整 pair，Receiver 可以只计算一次该 pair 与 `protected.epk` 的 `SS_ECC`；随后必须对全部 8、16 或 32 个 wire entry 分别使用该 pair 的 ML-KEM private key 解封装当前 entry 的 `ek`，由该 entry 的 `SS_ECC || SS_PQ` 同时派生候选 `rid` 与 KEK，并对固定 16 字节 `rid` 做常量时间比较。发现命中后仍必须完成全部 `local pair × wire entry` 组合的扫描。
+8. 完整扫描出现多个命中时，必须选择字典序最小的 `(wireIndex, localInputIndex)`。只允许使用该组合的 KEK 对对应 entry 执行一次 CEK unwrap；unwrap、GCM、inner、binding 或验签失败均不得回退尝试其它 entry。
+9. ML-KEM-768 对任意恰好 1088 字节 ciphertext 执行隐式拒绝。因错误或被交换的 `ek` 得到有效 32 字节替代秘密、最终没有任何 `rid` 命中时，只有在完整扫描结束后才返回 `NotForMe`；不得把单个 `rid` 不匹配当作提前退出条件。
+10. 若攻击者可控的低阶 `epk` 或任一 1088 字节 `ek` 触发密码 provider 的 X25519/ML-KEM 操作失败，Receiver 必须锁存 candidate crypto failure，使用不会产生有效命中的 dummy candidate 继续完成可安全执行的固定扫描和常量时间比较，并最终将消息作为 `InvalidMessage` 拒绝。即使其它组合随后产生有效 `rid` 命中，也必须在任何 CEK unwrap 前失败；不得忽略已锁存的失败或提前返回。内部实现可统一使用 `KEY_UNWRAP_FAILED`、固定的泛化 message 且不附带可区分 cause。选中 entry 的 A256KW 完整性失败使用相同公开外观。
+11. null、closed、foreign handle，错误本地公钥长度，以及 provider 返回 null/错误长度、HKDF 违约等本地配置或 provider contract failure 属于内部错误，不得伪装为 `NotForMe`。
+12. Receiver 必须在成功和失败路径清除 `SS_ECC`、`SS_PQ`、`Z`、候选 `rid`、候选/选中 KEK、CEK、inner 和 GCM AAD 等 owned 临时材料。长期 X25519/ML-KEM private-key handles 由调用方借用，protocol flow 不得关闭；Sender 的每消息临时 X25519 private-key handle 必须关闭。
+
+本修订不改变 Obfuscation Hybrid 的 wire 字段、长度或算法白名单。对外投递语义仍只有 `NotForMe` 与 `InvalidMessage`；protocol 内部细分错误码不得成为区分 ML-KEM 解封装、A256KW unwrap 或其它认证失败的远程 oracle。
