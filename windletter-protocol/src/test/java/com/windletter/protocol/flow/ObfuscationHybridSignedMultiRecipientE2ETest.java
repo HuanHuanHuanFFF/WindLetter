@@ -10,7 +10,8 @@ import com.windletter.protocol.model.ProtocolAuthenticationStatus;
 import com.windletter.protocol.model.ProtocolPayload;
 import com.windletter.protocol.parser.JacksonOuterWireParser;
 import com.windletter.protocol.wire.WindLetter;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
@@ -18,94 +19,113 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static com.windletter.protocol.flow.ProtocolFlowTestFixtures.assertProtocolCode;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ObfuscationHybridSignedMultiRecipientE2ETest {
 
-    @Test
-    void threeRealPairsRestoreOneSignedBinaryWireAndAuthenticateTheSender() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("representativeBuckets")
+    void realBouncyCastleRepresentativeBucketsAuthenticateFinalWireOrderAndSigner(
+            BucketCase testCase
+    ) {
         try (ObfuscationHybridFlowTestFixtures fixture =
                      new ObfuscationHybridFlowTestFixtures()) {
-            String wire = fixture.sendSigned(fixture.binaryPayload());
-            assertExactWireShape(wire);
+            List<ObfuscationHybridFlowTestFixtures.HybridPair> recipients =
+                    fixture.newRecipientPairs(testCase.realRecipients());
+            try {
+                ProtocolPayload payload = payload(
+                        fixture, testCase.payloadKind()
+                );
+                String wire = fixture.sendSigned(payload, recipients);
+                assertWireShapeAndAad(wire, testCase.bucket());
+                List<ObfuscationHybridFlowTestFixtures.RealRecipientPosition>
+                        realRecipients = fixture.realRecipientsInWireOrder(
+                        wire, recipients
+                );
 
-            for (ObfuscationHybridFlowTestFixtures.HybridPair recipient
-                    : fixture.recipients()) {
-                ObfuscationHybridSignedReceiver.Result result =
+                for (ObfuscationHybridFlowTestFixtures.RealRecipientPosition recipient
+                        : firstMiddleLast(realRecipients)) {
+                    ObfuscationHybridSignedReceiver.Result result =
+                            fixture.signedReceiver().receive(fixture.signedRequest(
+                                    wire,
+                                    fixture.trustedSigningResolver(),
+                                    List.of(recipient.pair().privateKeys())
+                            ));
+                    assertPayload(payload, result.payload());
+                    assertEquals(
+                            ProtocolFlowTestFixtures.MESSAGE_ID,
+                            result.messageId()
+                    );
+                    assertEquals(
+                            ProtocolFlowTestFixtures.TIMESTAMP,
+                            result.timestamp()
+                    );
+                    assertEquals(
+                            ProtocolAuthenticationStatus.SIGNED_VALID,
+                            result.authenticationStatus()
+                    );
+                    assertEquals(
+                            ObfuscationHybridFlowTestFixtures.IDENTITY_ID,
+                            result.authenticatedSender().identityId()
+                    );
+                    assertEquals(
+                            fixture.signingKid,
+                            result.authenticatedSender().signingKid()
+                    );
+                }
+
+                AtomicInteger resolverCalls = new AtomicInteger();
+                assertProtocolCode(ErrorCode.NOT_FOR_ME, () ->
                         fixture.signedReceiver().receive(fixture.signedRequest(
                                 wire,
-                                fixture.trustedSigningResolver(),
-                                List.of(recipient.privateKeys())
-                        ));
-                assertPayload(fixture.binaryPayload(), result.payload());
-                assertEquals(
-                        ProtocolFlowTestFixtures.MESSAGE_ID,
-                        result.messageId()
+                                kid -> {
+                                    resolverCalls.incrementAndGet();
+                                    return Optional.of(
+                                            fixture.trustedSigningKey()
+                                    );
+                                },
+                                List.of(fixture.unrelated.privateKeys())
+                        ))
                 );
-                assertEquals(
-                        ProtocolFlowTestFixtures.TIMESTAMP,
-                        result.timestamp()
-                );
-                assertEquals(
-                        ProtocolAuthenticationStatus.SIGNED_VALID,
-                        result.authenticationStatus()
-                );
-                assertEquals(
-                        ObfuscationHybridFlowTestFixtures.IDENTITY_ID,
-                        result.authenticatedSender().identityId()
-                );
-                assertEquals(
-                        fixture.signingKid,
-                        result.authenticatedSender().signingKid()
-                );
+                assertEquals(0, resolverCalls.get());
+            } finally {
+                ObfuscationHybridFlowTestFixtures.closePairs(recipients);
             }
-
-            AtomicInteger resolverCalls = new AtomicInteger();
-            assertProtocolCode(ErrorCode.NOT_FOR_ME, () ->
-                    fixture.signedReceiver().receive(fixture.signedRequest(
-                            wire,
-                            kid -> {
-                                resolverCalls.incrementAndGet();
-                                return Optional.of(fixture.trustedSigningKey());
-                            },
-                            List.of(fixture.unrelated.privateKeys())
-                    ))
-            );
-            assertEquals(0, resolverCalls.get());
         }
     }
 
-    @Test
-    void textAndEmptyPayloadsRoundTripThroughRealSignedHybridWires() {
-        try (ObfuscationHybridFlowTestFixtures fixture =
-                     new ObfuscationHybridFlowTestFixtures()) {
-            for (ProtocolPayload payload : List.of(
-                    fixture.textPayload(), fixture.emptyPayload()
-            )) {
-                String wire = fixture.sendSigned(payload);
-                ObfuscationHybridSignedReceiver.Result result =
-                        fixture.signedReceiver().receive(fixture.signedRequest(
-                                wire,
-                                fixture.trustedSigningResolver(),
-                                List.of(fixture.middle.privateKeys())
-                        ));
-                assertPayload(payload, result.payload());
-                assertEquals(
-                        ProtocolFlowTestFixtures.MESSAGE_ID,
-                        result.messageId()
-                );
-                assertEquals(
-                        ProtocolFlowTestFixtures.TIMESTAMP,
-                        result.timestamp()
-                );
-                assertEquals(
-                        ProtocolAuthenticationStatus.SIGNED_VALID,
-                        result.authenticationStatus()
-                );
-            }
-        }
+    static Stream<BucketCase> representativeBuckets() {
+        return Stream.of(
+                new BucketCase(8, 8, PayloadKind.TEXT),
+                new BucketCase(9, 16, PayloadKind.EMPTY),
+                new BucketCase(32, 32, PayloadKind.BINARY)
+        );
+    }
+
+    private static ProtocolPayload payload(
+            ObfuscationHybridFlowTestFixtures fixture,
+            PayloadKind kind
+    ) {
+        return switch (kind) {
+            case BINARY -> fixture.binaryPayload();
+            case TEXT -> fixture.textPayload();
+            case EMPTY -> fixture.emptyPayload();
+        };
+    }
+
+    private static List<ObfuscationHybridFlowTestFixtures.RealRecipientPosition>
+    firstMiddleLast(
+            List<ObfuscationHybridFlowTestFixtures.RealRecipientPosition>
+                    recipients
+    ) {
+        return List.of(
+                recipients.get(0),
+                recipients.get(recipients.size() / 2),
+                recipients.get(recipients.size() - 1)
+        );
     }
 
     private static void assertPayload(
@@ -124,11 +144,19 @@ class ObfuscationHybridSignedMultiRecipientE2ETest {
         }
     }
 
-    private static void assertExactWireShape(String wire) {
+    private static void assertWireShapeAndAad(
+            String wire,
+            int expectedBucket
+    ) {
         ObjectNode root = ProtocolFlowTestFixtures.parseObject(wire);
+        assertEquals(
+                Set.of("protected", "aad", "recipients", "iv", "ciphertext", "tag"),
+                fieldNames(root)
+        );
         ArrayNode recipients = root.withArray("recipients");
-        assertEquals(8, recipients.size());
+        assertEquals(expectedBucket, recipients.size());
         HashSet<String> rids = new HashSet<>();
+        HashSet<String> encapsulationCiphertexts = new HashSet<>();
         for (JsonNode value : recipients) {
             ObjectNode recipient = (ObjectNode) value;
             assertEquals(Set.of("rid", "encrypted_key", "ek"), fieldNames(recipient));
@@ -146,6 +174,12 @@ class ObfuscationHybridSignedMultiRecipientE2ETest {
                 assertEquals(40, encryptedKey.length);
                 assertEquals(1088, ek.length);
                 assertTrue(rids.add(recipient.get("rid").textValue()));
+                assertTrue(
+                        encapsulationCiphertexts.add(
+                                recipient.get("ek").textValue()
+                        ),
+                        "each real/decoy recipient entry must use an independent ek"
+                );
             } finally {
                 ObfuscationHybridFlowTestFixtures.clear(rid);
                 ObfuscationHybridFlowTestFixtures.clear(encryptedKey);
@@ -177,5 +211,19 @@ class ObfuscationHybridSignedMultiRecipientE2ETest {
         HashSet<String> fields = new HashSet<>();
         node.fieldNames().forEachRemaining(fields::add);
         return fields;
+    }
+
+    private enum PayloadKind { BINARY, TEXT, EMPTY }
+
+    record BucketCase(
+            int realRecipients,
+            int bucket,
+            PayloadKind payloadKind
+    ) {
+        @Override
+        public String toString() {
+            return realRecipients + " real -> " + bucket + " entries, "
+                    + payloadKind.name().toLowerCase();
+        }
     }
 }

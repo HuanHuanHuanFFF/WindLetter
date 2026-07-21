@@ -29,10 +29,14 @@ import com.windletter.protocol.routing.ObfuscationHybridRecipientPrivateKeys;
 import com.windletter.protocol.signature.Ed25519VerificationKeyResolver;
 import com.windletter.protocol.signature.TrustedEd25519Key;
 import com.windletter.protocol.wire.Epk;
+import com.windletter.protocol.wire.ObfuscationRecipient;
 import com.windletter.protocol.wire.WindLetter;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 final class ObfuscationHybridFlowTestFixtures implements AutoCloseable {
@@ -118,22 +122,114 @@ final class ObfuscationHybridFlowTestFixtures implements AutoCloseable {
     }
 
     String send(ProtocolPayload payload) {
+        return send(payload, recipients());
+    }
+
+    String send(
+            ProtocolPayload payload,
+            List<HybridPair> recipientPairs
+    ) {
         return sender().send(new ObfuscationHybridUnsignedSender.Request(
                 payload,
                 ProtocolFlowTestFixtures.MESSAGE_ID,
                 ProtocolFlowTestFixtures.TIMESTAMP,
-                recipients().stream().map(HybridPair::publicKeys).toList()
+                recipientPairs.stream().map(HybridPair::publicKeys).toList()
         )).wireJson();
     }
 
     String sendSigned(ProtocolPayload payload) {
+        return sendSigned(payload, recipients());
+    }
+
+    String sendSigned(
+            ProtocolPayload payload,
+            List<HybridPair> recipientPairs
+    ) {
         return signedSender().send(new ObfuscationHybridSignedSender.Request(
                 payload,
                 ProtocolFlowTestFixtures.MESSAGE_ID,
                 ProtocolFlowTestFixtures.TIMESTAMP,
                 senderSigning,
-                recipients().stream().map(HybridPair::publicKeys).toList()
+                recipientPairs.stream().map(HybridPair::publicKeys).toList()
         )).wireJson();
+    }
+
+    List<HybridPair> newRecipientPairs(int count) {
+        ArrayList<HybridPair> pairs = new ArrayList<>(count);
+        try {
+            for (int index = 0; index < count; index++) {
+                pairs.add(newPair());
+            }
+            return List.copyOf(pairs);
+        } catch (RuntimeException failure) {
+            closePairs(pairs);
+            throw failure;
+        }
+    }
+
+    List<RealRecipientPosition> realRecipientsInWireOrder(
+            String wire,
+            List<HybridPair> pairs
+    ) {
+        WindLetter parsed = new JacksonOuterWireParser().parse(wire);
+        byte[] epkX = ((Epk) parsed.protectedHeader().senderInfo()).x();
+        ArrayList<RealRecipientPosition> positions =
+                new ArrayList<>(pairs.size());
+        try {
+            for (HybridPair pair : pairs) {
+                int matchedWireIndex = -1;
+                try (ObfuscationHybridKeyDeriver.ReceiverContext context =
+                             keyDeriver.openForReceiver(
+                                     pair.x25519, pair.mlkem768, epkX
+                             )) {
+                    for (int wireIndex = 0;
+                         wireIndex < parsed.recipients().size();
+                         wireIndex++) {
+                        ObfuscationRecipient recipient =
+                                (ObfuscationRecipient) parsed.recipients()
+                                        .get(wireIndex);
+                        byte[] ek = recipient.ek();
+                        byte[] wireRid = recipient.rid();
+                        try (ObfuscationHybridKeyDeriver.DerivedMaterial material =
+                                     context.deriveEntry(ek)) {
+                            byte[] derivedRid = material.rid();
+                            try {
+                                if (!material.candidateCryptoFailed()
+                                        && MessageDigest.isEqual(
+                                        derivedRid, wireRid
+                                )) {
+                                    if (matchedWireIndex >= 0) {
+                                        throw new AssertionError(
+                                                "recipient pair matched multiple wire entries"
+                                        );
+                                    }
+                                    matchedWireIndex = wireIndex;
+                                }
+                            } finally {
+                                clear(derivedRid);
+                            }
+                        } finally {
+                            clear(ek);
+                            clear(wireRid);
+                        }
+                    }
+                }
+                if (matchedWireIndex < 0) {
+                    throw new AssertionError(
+                            "real Hybrid recipient entry not found"
+                    );
+                }
+                positions.add(new RealRecipientPosition(
+                        matchedWireIndex, pair
+                ));
+            }
+            positions.sort(Comparator.comparingInt(
+                    RealRecipientPosition::wireIndex
+            ));
+            return List.copyOf(positions);
+        } finally {
+            clear(epkX);
+        }
     }
 
     ObfuscationHybridUnsignedReceiver.Request request(
@@ -424,6 +520,15 @@ final class ObfuscationHybridFlowTestFixtures implements AutoCloseable {
 
     static void clear(byte[] value) {
         if (value != null) Arrays.fill(value, (byte) 0);
+    }
+
+    static void closePairs(List<HybridPair> pairs) {
+        for (int index = pairs.size() - 1; index >= 0; index--) {
+            pairs.get(index).close();
+        }
+    }
+
+    record RealRecipientPosition(int wireIndex, HybridPair pair) {
     }
 
     static final class HybridPair implements AutoCloseable {

@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 4 `Obfuscation X25519` 已完成并封板；阶段 5 `Obfuscation Hybrid` 已获用户确认并进入设计与开发。当前基线为 6 个真实组合，阶段 5 目标是补齐最后 2 个组合并封板八组合。
+> 状态：阶段 5 `Obfuscation Hybrid` 已完成并封板；WindLetter v1.0 的 8 个 mode × algorithm × signing 协议组合均已有真实 crypto + JSON wire E2E。当前等待用户确认阶段 6 `windletter-api` 真实编排。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -367,6 +367,15 @@ ProtocolSender
 - Hybrid obfuscation 不因首个不匹配/诱饵提前结束；非收件人与命中后失败的公开语义正确。
 - 相关模块测试和 `mvn -q test` 通过。
 
+### 实际完成证据（2026-07-21）
+
+- 新增 `obfuscation × X25519ML-KEM-768 × unsigned/signed` 的联合派生、recipient builder、完整扫描 CEK recovery 和四条 Sender/Receiver flow；真实链路包含 single EPK、逐 entry ML-KEM encapsulation、等长 decoy、8/16/32 bucket、shuffle、AAD、GCM、strict inner、binding 与可选 Ed25519 验签。
+- Hybrid representative E2E 覆盖 `1/8/9/16/17/32 → 8/8/16/16/32/32`，并按最终 shuffled wire 顺序验证首/中/尾真实收件人；8 个 v1 profile 各自完成 text 和含零字节/非 UTF-8 binary payload 往返，共 16 条全矩阵主链。
+- strict/tamper/randomness 覆盖 Hybrid conditional fields、固定长度、canonical Base64URL、bucket、writer 顺序、AAD/unwrap/GCM/binding/signature 错误语义及 EPK/IV/rid/ek/ciphertext 新鲜性；所有失败均不向调用者返回 payload/identity 结果。
+- Corrected focused matrix 为 24 suites/170 tests；protocol 及依赖为 69 suites/656 tests；Microsoft OpenJDK 17.0.16 下 fresh `mvn -q clean test` 为 80 suites/694 tests，0 failure、0 error、0 skipped，且没有删除测试或新增 `@Disabled/@Ignore`。
+- Final protocol/security、test-quality 与 phase-completeness review 均为 P0=0、P1=0。23 项 Deferred P2 及影响/建议记录在阶段实施计划 §12，不阻塞 Demo 主链。
+- 阶段 5 最终由设计、实施计划、Task 1–6 共 8 个独立闭环提交完成；既存 `docs/README.md` 行尾状态噪音未纳入提交，且本阶段未 push。
+
 ## 11. 阶段 6：接通 windletter-api 真实编排
 
 ### 能力目标
@@ -389,7 +398,7 @@ ProtocolSender
 - `windletter-api/.../impl/DefaultWindLetterReceiver.java`
 - mapper、error mapper、runtime composition root
 
-阶段子计划：`docs/dev/09-phase-6-api-orchestration-plan.md`
+阶段子计划：`docs/dev/10-phase-6-api-orchestration-plan.md`
 
 ### 完成判定
 
@@ -424,7 +433,7 @@ ProtocolSender
 - `windletter-testkit/.../matrix/`、`negative/`、`vectors/`、`regression/`
 - README/Demo 运行文档
 
-阶段子计划：`docs/dev/10-phase-7-armor-testkit-demo-plan.md`
+阶段子计划：`docs/dev/11-phase-7-armor-testkit-demo-plan.md`
 
 ### Demo 必须实际展示
 
@@ -529,9 +538,9 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 4 已完成并封板。当前 `public × {X25519, X25519ML-KEM-768} × {unsigned, signed}` 四组合与 `obfuscation × X25519 × {unsigned, signed}` 两组合均有真实多收件人 wire E2E；2026-07-21 使用指定 JDK 17 fresh 验证全仓 67 suites、606 tests，0 failure、0 error、0 skipped。Phase 4 final spec 与 code/security review 均为 P0=0、P1=0、新增 P2=0。
+阶段 5 已完成并封板。当前 `public/obfuscation × X25519/X25519ML-KEM-768 × unsigned/signed` 八组合均有真实 Sender/Receiver、JSON wire 与 payload E2E；2026-07-21 使用指定 JDK 17 fresh 验证全仓 80 suites、694 tests，0 failure、0 error、0 skipped。Phase 5 final protocol/security、test-quality 与 phase-completeness review 均为 P0=0、P1=0。
 
-阶段 5 已获用户确认。进入阶段时分支 `spike/demo-v0` 与 `origin/spike/demo-v0` 同步，HEAD 为 `0b64a815a97fccddd0bb7860476f006a03976a5d`，工作区仅有既存 `docs/README.md` 行尾状态噪音；该文件继续排除。指定 JDK 17 fresh `mvn -q clean test` 仍为 67 suites、606 tests 全绿。只读审计确认 strict parser、wire model 与 writer 已支持 Obfuscation Hybrid，主链断点是同一 `Z` 的 rid/KEK 联合派生、逐 entry ML-KEM 完整扫描、Hybrid recipient builder 与四条 flow。
+分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音仍保持未纳入。Phase 5 的主链断点已经消除，下一条真实 Demo 主链断点是 `windletter-api` 尚未把 resolver/store、key lease、8 个 protocol flow、认证策略和公开错误映射编排为调用者可用的 Sender/Receiver。
 
 ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL(SHA-256(raw 1184-byte public key))`。Phase 3 最终 spec 与 code/security review 均无 Critical/Important/P0/P1；累计 P2 详见 `docs/dev/05-phase-3-public-hybrid-implementation-plan.md` §12。
 
@@ -542,6 +551,7 @@ ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL
 - 阶段 2 的 signed/unsigned orchestration 重复、effective payload 上限、Java immutable string 清零边界和 API dormant invariants 等 P2 详见 `docs/dev/03-phase-2-signed-authentication-plan.md` §11。
 - 阶段 3 仍有完整 Hybrid pair 规范化表述、canonical Base64URL/封闭字段集、内部错误到 API 公开 `InvalidMessage` 的映射，以及少量生命周期/测试 hardening P2；实现已采取更严格行为，不影响当前协议链正确性。
 - 阶段 4 的 20 项 P2 主要是重复编排、API 公开错误映射、不可销毁 immutable 数据边界和测试 hardening；影响与建议详见 `docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md` §11，其中 API obfuscation DTO/mapper 与公开 `InvalidMessage` 映射必须在阶段 6 接线时处理。
-- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 5。
+- 阶段 5 的 23 项 P2 主要是完整扫描性能预算、阶段专用重复、provider-contract/lifecycle 测试深度和少量跨层重复矩阵；影响与建议详见 `docs/dev/09-phase-5-obfuscation-hybrid-implementation-plan.md` §12。已知项不构成协议、密码学或认证 P0/P1；API 错误统一和 Hybrid key lease 属阶段 6 正式范围。
+- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 6 API 编排。
 
-当前正在执行阶段 5 `obfuscation × X25519ML-KEM-768 × unsigned/signed`。先以正式协议末尾开发修订冻结原子 Hybrid identity、`local pair × wire entry` 完整扫描、tie-break、single unwrap/no-fallback 和错误语义，再按联合派生、recipient builder、CEK recovery、unsigned、signed 与八组合封板的闭环顺序实现；不提前进入 API、armor 或 Demo 入口。
+下一阶段建议进入阶段 6 `windletter-api` 真实编排，先审计现有 DTO/SPI 与 8 条 protocol flow 的映射断点，再形成 `docs/dev/10-phase-6-api-orchestration-plan.md`。按大阶段确认规则，本阶段封板后停止开发，等待用户明确确认；不提前进入 API、armor 或 Demo 入口。
