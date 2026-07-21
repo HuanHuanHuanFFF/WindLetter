@@ -4,7 +4,7 @@
 
 **Architecture:** 新增 Hybrid obfuscation 专用联合派生、recipient builder、full-scan CEK recovery 和四条 flow。复用现有 wire/AAD/binding/inner/crypto 基础，但不修改已封板的 public 与 Obfuscation X25519 主链，不提前抽取通用算法框架。
 
-**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1/2 已提交，Task 3 已实现并通过提交前门禁，Task 4 开始执行。
+**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1/2/3 已提交，Task 4 已实现并通过提交前门禁，Task 5 开始执行。
 
 ## 1. 执行基线与硬约束
 
@@ -431,6 +431,16 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationHybridUnsignedSenderTest,O
 feat(protocol): add obfuscation hybrid unsigned flow
 ```
 
+### 7.4 实际证据（2026-07-21）
+
+- RED：共享 fixture、sender/receiver unit 与真实 multi-recipient E2E 因 `ObfuscationHybridUnsignedSender/Receiver` 不存在而按预期编译失败。
+- GREEN：新增两条完整 flow 和 6 个 Task 4 tests；真实 BC 三收件人经 builder 形成 8-entry bucket，每个完整 private-key pair 均可从实际 JSON wire 恢复包含零字节与非 UTF-8 字节的 binary payload，unrelated pair 为 `NOT_FOR_ME`。
+- wire/profile 已锁定：`cty=wind+inner`、`key_alg=X25519ML-KEM-768`、单 EPK；所有 entry 均为 `rid16/ek1088/encryptedKey40` 且无 kid，最终 shuffled recipients 同时进入 AAD、两项 binding 与 wire。
+- Receiver 门序已用 poisoned local list 锁定：malformed/profile/AAD/duplicate-rid 均先于本地 handle 读取；recovery 异常原样透传，ciphertext tamper 为 `GCM_AUTH_FAILED`，认证后的错误 binding 为 `BINDING_FAILED`。
+- Sender 成功与 GCM 失败、Receiver 成功与 GCM 认证失败均直接持有原始 CEK/IV/inner/GCM-AAD/provider-output 引用并验证 finally 清零；borrowed X25519/ML-KEM handles 保持开启。
+- focused 六套件 21 tests 通过；`windletter-protocol` 及依赖 reactor 通过；三路独立协议、安全、测试/代码审查确认 P0=0、P1=0。
+- 范围保持为 unsigned sender/receiver、共享测试 fixture、三类 Task 4 tests 与本计划证据，不包含 signed flow 或 Task 6 矩阵。
+
 ## 8. Task 5：Obfuscation Hybrid signed 完整收发
 
 ### 8.1 生产 API
@@ -617,3 +627,6 @@ test(protocol): close obfuscation hybrid phase
 12. **Task 3 更大 bucket 的顺序矩阵**：固定扫描调用数和 wire-outer 顺序已在 8-entry bucket 锁定，16/32 bucket 由 builder/最终 E2E 覆盖但未逐项记录 decap 顺序。影响仅为测试深度；Task 6 可按成本补一个 32-entry 计数用例。
 13. **Task 3 清零观测深度**：selected KEK/wrapped/provider CEK、candidate/wire rid、provider secrets 已直接观察；malformed-local/HKDF INTERNAL 分支以及 EPK、wire `ek`、未选中 encrypted-key snapshot 未全部持有引用逐项断言。生产 finally 路径已审查正确；Demo 后用共享 tracking fixture 补齐。
 14. **Task 3 原子 pair 负例深度**：duplicate complete pair 与共享单 component 已覆盖，但未单独构造“跨两条记录交叉拼接才会命中”的负例。生产始终以 record pair 建 context，不生成交叉组合；最终多收件人 E2E 后再补显式 mutation test。
+15. **Task 4 重复边界与 provider-contract 测试深度**：本闭环锁定了真实主链、关键门序、GCM/binding 失败与原始引用清零，但未重复铺开 33 recipients、全部 UUID/时间边界、GCM null/错长、Result 契约和 authenticated malformed-inner。相邻 profile 与底层组件已有对应证据；Task 6 优先补跨 profile/tamper 矩阵，剩余重复 mutation 留 Demo 后。
+16. **GCM provider 故障诊断粒度**：Receiver 与既有 flow 一致，将 GCM runtime、null 输出和真实 tag 认证失败统一映射为 `GCM_AUTH_FAILED`。这不会释放 payload，且 Phase 6 API 仍会统一为 `InvalidMessage`；影响仅为内部 provider 故障诊断，Demo 后可引入更明确的 provider-contract 分类。
+17. **Task 4 borrowed-handle 失败路径显式覆盖**：成功与 unrelated 路径已证明真实 handle 未关闭，生产 flow/recovery 也没有关闭 borrowed handles；AAD、GCM、binding 每条失败路径尚未逐一重复读取 handle 证明开放。影响为测试完备性，不是已知生命周期错误，Task 6 或 Demo 后统一补 tracking fixture。
