@@ -47,6 +47,7 @@ public final class DefaultWindLetterSender implements WindLetterSender {
     private final IdentityService identities;
     private final PublicX25519UnsignedSender publicX25519Unsigned;
     private final PublicX25519SignedSender publicX25519Signed;
+    private final PublicHybridSenderOrchestrator publicHybrid;
 
     public DefaultWindLetterSender(
         RecipientPublicKeyResolver recipientKeys,
@@ -73,12 +74,21 @@ public final class DefaultWindLetterSender implements WindLetterSender {
             gcm,
             new BouncyCastleEd25519Crypto()
         );
+        this.publicHybrid = new PublicHybridSenderOrchestrator(
+            recipientKeys,
+            senderEncryptionKeys,
+            identities
+        );
     }
 
     @Override
     public EncryptedMessage encrypt(EncryptRequest request) {
         requireRequest(request);
         requireRawWire(request.armorFormat(), request.customHeaders());
+        if (request.mode() == WindMode.PUBLIC
+            && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
+            return publicHybrid.encrypt(request);
+        }
         requirePublicX25519(request.mode(), request.keyAlgProfile());
 
         List<byte[]> recipientPublicKeys = resolveX25519Recipients(request.recipients());
@@ -106,6 +116,10 @@ public final class DefaultWindLetterSender implements WindLetterSender {
     public EncryptedMessage encryptAndSign(EncryptAndSignRequest request) {
         requireRequest(request);
         requireRawWire(request.armorFormat(), request.customHeaders());
+        if (request.mode() == WindMode.PUBLIC
+            && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
+            return publicHybrid.encryptAndSign(request);
+        }
         requirePublicX25519(request.mode(), request.keyAlgProfile());
 
         List<byte[]> recipientPublicKeys = resolveX25519Recipients(request.recipients());
