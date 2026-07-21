@@ -4,7 +4,7 @@
 
 **Architecture:** 新增 Hybrid obfuscation 专用联合派生、recipient builder、full-scan CEK recovery 和四条 flow。复用现有 wire/AAD/binding/inner/crypto 基础，但不修改已封板的 public 与 Obfuscation X25519 主链，不提前抽取通用算法框架。
 
-**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1 已提交，Task 2 已实现并通过提交前门禁，Task 3 开始执行。
+**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1/2 已提交，Task 3 已实现并通过提交前门禁，Task 4 开始执行。
 
 ## 1. 执行基线与硬约束
 
@@ -360,6 +360,16 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationHybridCekRecoveryTest,Obfu
 feat(protocol): recover obfuscation hybrid cek
 ```
 
+### 6.4 实际证据（2026-07-21）
+
+- RED：`ObfuscationHybridRecipientPrivateKeys` 与 `ObfuscationHybridCekRecovery` 不存在，focused 测试按预期编译失败。
+- GREEN：新测试 10 tests；真实 BC builder wire 可恢复 CEK，wrong/rotated exact-length `ek` 与随机 decoy 经完整扫描为 `NOT_FOR_ME`。
+- 固定工作量已锁定：2 local × 8 wire 始终为 2 X25519、16 decap、32 HKDF、16 compare；测试记录并验证 wire-outer/local-inner 顺序。
+- ML-KEM failure 在第 1/8/16 个候选注入，包含先命中后末尾失败，均完整扫描、0 unwrap、泛化失败；真实 BC zero EPK 对两个 local pair 走完整 dummy scan。
+- duplicate wire rid 与全部 malformed wire 在任何 local handle 前拒绝；完整 pair 判重、共享单 component、unsnapshotable local list、tie-break、单次 unwrap/no fallback 与错误映射均有回归。
+- focused 四套件 48 tests 通过；`windletter-protocol` 及依赖 reactor 通过；两路独立审查确认生产/测试 P0=0、P1=0。
+- 范围保持为 private-pair value object、full-scan recovery、test 与本计划证据，不包含 GCM/inner/binding flow。
+
 ## 7. Task 4：Obfuscation Hybrid unsigned 完整收发
 
 ### 7.1 生产 API
@@ -604,3 +614,6 @@ test(protocol): close obfuscation hybrid phase
 9. **Task 2 异常 List 快照 hardening**：普通稳定列表会在 crypto 前完整验证和复制；恶意或并发变化的自定义 `List` 可能使初始 `size()` 与迭代项数不一致。影响限本地调用方合同，不是远程协议漏洞；Demo 后可先 `List.copyOf` 再统一验数验项。
 10. **Task 2 provider 重复 `ek` 灾难检测**：每个真实 pair 已独立调用 encapsulation，正常 BC 与测试均证明 `ek` 独立；builder 不额外拒绝底层 RNG/provider 灾难性重复的 1088-byte ciphertext。Demo 后可加入 per-message `ek` 唯一性防御。
 11. **Task 2 failure-path 穷举**：尚未直接测试 ephemeral public key null/错长、A256KW null/39/41-byte 输出及 shuffle `nextInt` 失败；生产长度校验与 finally 路径已审查正确。影响为回归覆盖完整性，Task 6 或 Demo 后补 mutation matrix。
+12. **Task 3 更大 bucket 的顺序矩阵**：固定扫描调用数和 wire-outer 顺序已在 8-entry bucket 锁定，16/32 bucket 由 builder/最终 E2E 覆盖但未逐项记录 decap 顺序。影响仅为测试深度；Task 6 可按成本补一个 32-entry 计数用例。
+13. **Task 3 清零观测深度**：selected KEK/wrapped/provider CEK、candidate/wire rid、provider secrets 已直接观察；malformed-local/HKDF INTERNAL 分支以及 EPK、wire `ek`、未选中 encrypted-key snapshot 未全部持有引用逐项断言。生产 finally 路径已审查正确；Demo 后用共享 tracking fixture 补齐。
+14. **Task 3 原子 pair 负例深度**：duplicate complete pair 与共享单 component 已覆盖，但未单独构造“跨两条记录交叉拼接才会命中”的负例。生产始终以 record pair 建 context，不生成交叉组合；最终多收件人 E2E 后再补显式 mutation test。
