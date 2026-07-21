@@ -4,7 +4,7 @@
 
 **Architecture:** 新增 Hybrid obfuscation 专用联合派生、recipient builder、full-scan CEK recovery 和四条 flow。复用现有 wire/AAD/binding/inner/crypto 基础，但不修改已封板的 public 与 Obfuscation X25519 主链，不提前抽取通用算法框架。
 
-**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1/2/3 已提交，Task 4 已实现并通过提交前门禁，Task 5 开始执行。
+**Status:** 2026-07-21 协议修订与设计已在 `cd26447` 完成；Task 1/2/3/4 已提交，Task 5 已实现并通过提交前门禁，Task 6 开始执行。
 
 ## 1. 执行基线与硬约束
 
@@ -486,6 +486,17 @@ mvn -q -pl windletter-protocol -am "-Dtest=ObfuscationHybridSignedSenderTest,Obf
 feat(protocol): add obfuscation hybrid signed flow
 ```
 
+### 8.4 实际证据（2026-07-21）
+
+- RED：扩展后的真实 Hybrid fixture 与 signed sender/receiver/E2E tests 因 `ObfuscationHybridSignedSender/Receiver` 不存在而按预期编译失败。
+- GREEN：新增两条 signed flow 与 8 个 Task 5 tests；binary、text、empty payload 均经过真实 BC Hybrid builder、Ed25519、AES-GCM、JSON wire、full-scan recovery 与验签，完整恢复 content type/data/original size/message ID/timestamp。
+- Sender 精确生成 `cty=wind+jws`、`key_alg=X25519ML-KEM-768`、单 EPK 与 `rid16/ek1088/encryptedKey40` 的 8-entry bucket；签名输入与 `SignedInnerCodec.Prepared` 的 exact segments 一致，最终 recipients 同时进入 AAD、binding 与 wire。
+- Receiver 已证明使用 exact received segments：非规范但合法的 protected/payload JSON 段按原字节签名后可成功验证；binding failure 与 unrelated recipient 均在 resolver 前停止。
+- 认证失败矩阵已锁定：unknown signer/signature flip 为 `SIGNATURE_INVALID`；resolver record kid mismatch 与实际公钥派生 kid mismatch 为 `INTERNAL_ERROR`；自洽 wrong trusted key 通过两层 kid 检查后只调用一次 Ed25519 verify，并以 `SIGNATURE_INVALID` 结束且不返回 identity。
+- Sender 签名输入、signature、CEK/IV/inner/GCM-AAD 的原始引用在成功和签名失败路径清零；Receiver exact verification public key/input/signature 在成功与 wrong-key 失败路径清零；所有签名与收件人私钥 handle 均保持 borrowed。
+- focused 六套件 14 tests 通过；`windletter-protocol` 及依赖 reactor 为 56 suites/567 tests，0 failure、0 error、0 skipped；三路独立审查及补充复审确认 P0=0、P1=0。
+- 范围保持为 signed sender/receiver、共享 fixture 扩展、三类 signed tests 与本计划证据；完整 bucket/tamper/randomness/八 profile 矩阵仍由 Task 6 封板。
+
 ## 9. Task 6：八组合 strict/tamper/randomness 与阶段封板
 
 ### 9.1 非重复 E2E 矩阵
@@ -630,3 +641,6 @@ test(protocol): close obfuscation hybrid phase
 15. **Task 4 重复边界与 provider-contract 测试深度**：本闭环锁定了真实主链、关键门序、GCM/binding 失败与原始引用清零，但未重复铺开 33 recipients、全部 UUID/时间边界、GCM null/错长、Result 契约和 authenticated malformed-inner。相邻 profile 与底层组件已有对应证据；Task 6 优先补跨 profile/tamper 矩阵，剩余重复 mutation 留 Demo 后。
 16. **GCM provider 故障诊断粒度**：Receiver 与既有 flow 一致，将 GCM runtime、null 输出和真实 tag 认证失败统一映射为 `GCM_AUTH_FAILED`。这不会释放 payload，且 Phase 6 API 仍会统一为 `InvalidMessage`；影响仅为内部 provider 故障诊断，Demo 后可引入更明确的 provider-contract 分类。
 17. **Task 4 borrowed-handle 失败路径显式覆盖**：成功与 unrelated 路径已证明真实 handle 未关闭，生产 flow/recovery 也没有关闭 borrowed handles；AAD、GCM、binding 每条失败路径尚未逐一重复读取 handle 证明开放。影响为测试完备性，不是已知生命周期错误，Task 6 或 Demo 后统一补 tracking fixture。
+18. **Task 5 provider-contract 负例深度**：核心真实签名、wrong key、record/public kid mismatch 与 signature flip 已覆盖，但尚未穷举 signing handle `publicKey()` null/错长/throw、sign throw、resolver null/throw、verify throw 以及 GCM provider null/错长。生产错误分类与 finally 路径已按既有 signed flow 复核；影响为诊断和 mutation 覆盖，非已知认证绕过。
+19. **Task 5 失败路径生命周期重复覆盖**：本任务直接观察了 Sender 与 verifier 的关键原始数组清零，recovery/GCM 失败及每条失败后 borrowed Hybrid handles 保持开放主要由 Task 3/4 与同构 signed flow 证明。生产代码没有关闭 borrowed handles，且统一 finally 清理 owned arrays；Demo 后可用一套共享 tracking fixture 消除重复测试成本。
+20. **Task 5 fixture 体积**：为真实篡改、重加密和 exact-segment 验证，阶段 fixture 增加了较多测试辅助代码。它只影响测试维护性，不影响生产协议；八组合封板后再迁入 testkit 或抽取 profile-neutral helper。
