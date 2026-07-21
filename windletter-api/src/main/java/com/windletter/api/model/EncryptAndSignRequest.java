@@ -15,7 +15,7 @@ import java.util.Map;
  * @param payload business payload
  * @param recipients recipient list (non-empty)
  * @param customHeaders optional custom header extensions (placed in payload.meta.ext)
- * @param senderEncryptionIdentity sender encryption identity reference (required)
+ * @param senderEncryptionIdentity sender encryption identity reference; required for public and forbidden for obfuscation
  * @param senderSigningIdentity signing identity reference (required)
  */
 public record EncryptAndSignRequest(
@@ -41,10 +41,16 @@ public record EncryptAndSignRequest(
         payload = ModelChecks.requireNonNull(payload, "payload");
         recipients = ModelChecks.copyNonEmptyList(recipients, "recipients");
         customHeaders = ModelChecks.copyMap(customHeaders);
-        senderEncryptionIdentity = ModelChecks.requireNonNull(
-            senderEncryptionIdentity,
-            "senderEncryptionIdentity"
-        );
+        if (mode == WindMode.PUBLIC) {
+            senderEncryptionIdentity = ModelChecks.requireNonNull(
+                senderEncryptionIdentity,
+                "senderEncryptionIdentity"
+            );
+        } else if (senderEncryptionIdentity != null) {
+            throw new IllegalArgumentException(
+                "senderEncryptionIdentity must be null when mode is OBFUSCATION"
+            );
+        }
         senderSigningIdentity = ModelChecks.requireNonNull(senderSigningIdentity, "senderSigningIdentity");
     }
 }

@@ -16,7 +16,7 @@ import java.util.Map;
  * @param payload business payload
  * @param recipients recipient list (non-empty)
  * @param customHeaders optional custom header extensions
- * @param senderEncryptionIdentity sender encryption identity reference (required)
+ * @param senderEncryptionIdentity sender encryption identity reference; required for public and forbidden for obfuscation
  */
 public record EncryptRequest(
     WindMode mode,
@@ -41,9 +41,15 @@ public record EncryptRequest(
         // Freeze immutable views to avoid later caller-side mutations affecting this request object.
         recipients = ModelChecks.copyNonEmptyList(recipients, "recipients");
         customHeaders = ModelChecks.copyMap(customHeaders);
-        senderEncryptionIdentity = ModelChecks.requireNonNull(
-            senderEncryptionIdentity,
-            "senderEncryptionIdentity"
-        );
+        if (mode == WindMode.PUBLIC) {
+            senderEncryptionIdentity = ModelChecks.requireNonNull(
+                senderEncryptionIdentity,
+                "senderEncryptionIdentity"
+            );
+        } else if (senderEncryptionIdentity != null) {
+            throw new IllegalArgumentException(
+                "senderEncryptionIdentity must be null when mode is OBFUSCATION"
+            );
+        }
     }
 }

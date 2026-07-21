@@ -19,7 +19,8 @@ class ErrorCodeTest {
             "BINDING_FAILED",
             "SIGNATURE_INVALID",
             "INVALID_FIELD",
-            "INTERNAL_ERROR"
+            "INTERNAL_ERROR",
+            "INVALID_MESSAGE"
         };
 
         ErrorCode[] values = ErrorCode.values();
