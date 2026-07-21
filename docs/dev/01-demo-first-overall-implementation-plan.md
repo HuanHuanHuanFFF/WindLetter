@@ -144,8 +144,8 @@ Outer 与 inner 都必须：
 | 2 | public × X25519 × signed | protocol | 已完成并封板 |
 | 3 | public × Hybrid × signed/unsigned | protocol | 已完成并封板 |
 | 4 | obfuscation × X25519 × signed/unsigned | protocol | 已完成并封板（606 tests；0 failure/error/skip） |
-| 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 未开始 |
-| 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 未开始 |
+| 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 已完成并封板（694 tests；0 failure/error/skip） |
+| 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 执行中 |
 | 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 未开始 |
 
 ## 6. 阶段 1：Public X25519 Unsigned 真实纵向主链
