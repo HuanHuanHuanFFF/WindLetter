@@ -1,6 +1,6 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
-> 状态：进行中；Task 1—4 已完成，下一步 Task 5 最终 testkit 与负例矩阵
+> 状态：进行中；Task 1—5 已完成，下一步 Task 6 可独立运行 Demo
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`
 
@@ -125,14 +125,15 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 - 完成条件：全部 8 个 profile 经 `NONE`、`BASE64URL`、`WIND_BASE_1024F_V1`、`BINARY` 的公开 API round-trip。
 - 完成证据：公开 API 已覆盖 8 profiles × 4 formats × text/binary payload；Base64URL/WindBase 文本自动识别通过，损坏 armor 在 recipient key lease 打开前统一返回 `INVALID_MESSAGE`；`DecryptRequest` 已强制三种输入表示 exact-one。指定 JDK 17 全仓 811 tests，0 failure、0 error、0 skipped。
 
-### Task 5：最终 testkit 与负例矩阵（下一步）
+### Task 5：最终 testkit 与负例矩阵（已完成）
 
 - 建立生产链使用的内存 Demo key repository，不用 mock 核心协议或密码学。
 - 覆盖 public/obfuscation × X25519/Hybrid × signed/unsigned × 所有 armor。
 - 覆盖多收件人、obfuscation padding、NOT_FOR_ME、INVALID_MESSAGE、armor 篡改、wrong format、截断和超限。
 - 增加 deterministic armor vectors 与关键协议回归入口。
+- 完成证据：`windletter-testkit` 已提供基于真实 BC 私钥句柄与 API lease 的单场景内存密钥仓库；107 项聚焦测试覆盖 8 profiles × 4 formats × text/binary payload、多收件人、obfuscation 8 槽填充、所有 profile/armor 的 `NOT_FOR_ME`、截断、等长篡改、wrong format、20 MiB 超限，以及三种 armor 固定向量。指定 JDK 17 全仓 93 suites / 918 tests，0 failure、0 error、0 skipped。
 
-### Task 6：可独立运行的 WindLetterDemo
+### Task 6：可独立运行的 WindLetterDemo（下一步）
 
 - 提供不依赖 JUnit 的 `main` 入口和明确 Maven 运行命令。
 - 实际生成密钥、payload、多收件人、可选签名、outer JSON 与 armor，随后由 Receiver 恢复 payload。

@@ -27,6 +27,11 @@
         </dependency>
         <dependency>
             <groupId>com.windletter</groupId>
+            <artifactId>windletter-armor</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.windletter</groupId>
             <artifactId>windletter-crypto</artifactId>
             <version>${project.version}</version>
         </dependency>

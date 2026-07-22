@@ -146,7 +146,7 @@ Outer 与 inner 都必须：
 | 4 | obfuscation × X25519 × signed/unsigned | protocol | 已完成并封板（606 tests；0 failure/error/skip） |
 | 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 已完成并封板（694 tests；0 failure/error/skip） |
 | 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 已完成（2026-07-22） |
-| 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 进行中（Task 1—4 已完成） |
+| 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 进行中（Task 1—5 已完成） |
 
 ## 6. 阶段 1：Public X25519 Unsigned 真实纵向主链
 
@@ -551,9 +551,9 @@ mvn -q test
 
 阶段 6 已完成并封板。阶段 7 已获用户允许并进入开发，详细审计、armor v1 contract、任务顺序和阶段门见 `docs/dev/11-phase-7-armor-testkit-demo-plan.md`。
 
-2026-07-22 重新审计确认：`windletter-armor` 与 `windletter-testkit` 都尚无 Java 源码；正式 v1.0 协议只定义 outer JSON wire，armor 是不得改变协议语义的项目传输扩展；API 虽预留四种 `ArmorFormat`，Runtime 仍明确只支持 raw JSON。指定 JDK 17 下 `mvn -q test` 基线成功。
+2026-07-22 阶段启动审计时，`windletter-armor` 与 `windletter-testkit` 都尚无 Java 源码；正式 v1.0 协议只定义 outer JSON wire，因此本阶段把 armor 限定为不得改变协议语义的项目传输扩展。该段为启动基线，后续实际进展以以下记录为准。
 
-阶段 7 Task 2—4 已完成共同 binary frame、canonical Base64URL、码点安全的 WIND_BASE_1024F_V1 及公开 API 编排。Sender 的全部 8 个 profile 可输出 `NONE`、`BASE64URL`、`WIND_BASE_1024F_V1`、`BINARY`；Receiver 可严格解码显式或自动识别的文本 armor，并在打开私钥前统一拒绝损坏输入。`DecryptRequest` 已强制 raw/text/binary exact-one；指定 JDK 17 全仓 811 tests，0 failure、0 error、0 skipped。下一开发闭环是 Task 5：把最终矩阵、负例和可复用真实密钥仓库落入 `windletter-testkit`。
+阶段 7 Task 2—5 已完成共同 binary frame、canonical Base64URL、码点安全的 WIND_BASE_1024F_V1、公开 API 编排和最终 testkit。`windletter-testkit` 已提供真实 BC 密钥仓库；107 项聚焦测试覆盖完整 8 profiles × 4 formats × text/binary payload、多收件人、混淆填充、`NOT_FOR_ME`、篡改/截断/错格式/超限与固定向量。指定 JDK 17 全仓 93 suites / 918 tests，0 failure、0 error、0 skipped。下一开发闭环是 Task 6：提供并实际运行不依赖 JUnit 的 `WindLetterDemo`。
 
 阶段 7 已识别的 `DecryptRequest` 输入歧义、解码资源上限、补充平面码点处理和公开错误收敛四项 P1 均已解决。阶段 1—6 的既有 P2 与阶段 7 的 streaming、字体平台、测试去重、跨语言互操作等 P2 均记录后继续推进，不先于 Demo 主链。
 
