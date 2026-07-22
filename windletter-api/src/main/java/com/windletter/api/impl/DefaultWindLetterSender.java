@@ -49,6 +49,7 @@ public final class DefaultWindLetterSender implements WindLetterSender {
     private final PublicX25519SignedSender publicX25519Signed;
     private final PublicHybridSenderOrchestrator publicHybrid;
     private final ObfuscationX25519SenderOrchestrator obfuscationX25519;
+    private final ObfuscationHybridSenderOrchestrator obfuscationHybrid;
 
     public DefaultWindLetterSender(
         RecipientPublicKeyResolver recipientKeys,
@@ -84,6 +85,10 @@ public final class DefaultWindLetterSender implements WindLetterSender {
             recipientKeys,
             identities
         );
+        this.obfuscationHybrid = new ObfuscationHybridSenderOrchestrator(
+            recipientKeys,
+            identities
+        );
     }
 
     @Override
@@ -97,6 +102,10 @@ public final class DefaultWindLetterSender implements WindLetterSender {
         if (request.mode() == WindMode.OBFUSCATION
             && request.keyAlgProfile() == KeyAlgProfile.X25519) {
             return obfuscationX25519.encrypt(request);
+        }
+        if (request.mode() == WindMode.OBFUSCATION
+            && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
+            return obfuscationHybrid.encrypt(request);
         }
         requirePublicX25519(request.mode(), request.keyAlgProfile());
 
@@ -132,6 +141,10 @@ public final class DefaultWindLetterSender implements WindLetterSender {
         if (request.mode() == WindMode.OBFUSCATION
             && request.keyAlgProfile() == KeyAlgProfile.X25519) {
             return obfuscationX25519.encryptAndSign(request);
+        }
+        if (request.mode() == WindMode.OBFUSCATION
+            && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
+            return obfuscationHybrid.encryptAndSign(request);
         }
         requirePublicX25519(request.mode(), request.keyAlgProfile());
 

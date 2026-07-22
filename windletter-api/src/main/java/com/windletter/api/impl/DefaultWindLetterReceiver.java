@@ -55,6 +55,7 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
     private final PublicX25519SignedReceiver publicX25519Signed;
     private final PublicHybridReceiverOrchestrator publicHybrid;
     private final ObfuscationX25519ReceiverOrchestrator obfuscationX25519;
+    private final ObfuscationHybridReceiverOrchestrator obfuscationHybrid;
 
     public DefaultWindLetterReceiver(
         RecipientKeyStore recipientKeys,
@@ -84,6 +85,10 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
             identities
         );
         this.obfuscationX25519 = new ObfuscationX25519ReceiverOrchestrator(
+            recipientKeys,
+            identities
+        );
+        this.obfuscationHybrid = new ObfuscationHybridReceiverOrchestrator(
             recipientKeys,
             identities
         );
@@ -136,7 +141,7 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
         if (obfuscationMode) {
             return x25519Profile
                 ? obfuscationX25519.decrypt(request, signed)
-                : invalidMessage();
+                : obfuscationHybrid.decrypt(request, signed);
         }
         if (hybridProfile) {
             return publicHybrid.decrypt(request, signed);
