@@ -1,6 +1,6 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
-> 状态：进行中；Task 1—2 已完成，下一步 Task 3 WIND_BASE_1024F_V1 codec
+> 状态：进行中；Task 1—3 已完成，下一步 Task 4 API Sender/Receiver armor 编排
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`
 
@@ -107,14 +107,15 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 - 完成条件：armor 模块相关测试全部通过，现有全仓测试无回归。
 - 完成证据：2026-07-22 使用指定 JDK 17，聚焦测试与 `mvn -q test` 均通过；全仓 89 suites / 754 tests，0 failure、0 error、0 skipped。
 
-### Task 3：WIND_BASE_1024F_V1 codec（下一步）
+### Task 3：WIND_BASE_1024F_V1 codec（已完成）
 
 - 将冻结字表作为 jar resource 纳入 `windletter-armor`，启动时校验 1024 码点、唯一性与 SHA-256。
 - 实现 10-bit MSB-first packing/unpacking、严格码点解析、尾部零 bit 与 canonical 校验。
 - 建立 0..N 尾长、补充平面、未知码点、重复/错序字表防回归测试和确定性向量。
 - 完成条件：任何 `String.length()`/`char` 误用都能被测试捕获，三种 armor 对同一 frame 恢复 identical bytes。
+- 完成证据：冻结字表 resource 与设计文件逐 byte 相同且 SHA-256 为 `255519fb0d061d88fbd9a8d216ceb6494e09e9fb72e80d7c1815ca4aef794eba`；固定向量、全部尾长与严格负例通过；指定 JDK 17 全仓 91 suites / 761 tests，0 failure、0 error、0 skipped。
 
-### Task 4：API Sender/Receiver armor 编排
+### Task 4：API Sender/Receiver armor 编排（下一步）
 
 - `windletter-api` 依赖 `windletter-armor`。
 - Sender 先生成真实 raw outer JSON，再按请求格式生成 text/binary armor；`EncryptedMessage.wireJson` 仍保留用于观测和调试。

@@ -117,6 +117,16 @@ public final class WindLetterArmor {
         return decodeBinary(frame);
     }
 
+    /** Encodes the common binary frame with the frozen 1024-code-point v1 alphabet. */
+    public static String encodeWindBase1024F(byte[] wireJsonUtf8) {
+        return WindBase1024FCodec.encodeFrame(encodeBinary(wireJsonUtf8));
+    }
+
+    /** Decodes canonical WIND_BASE_1024F_V1 text and validates the common frame. */
+    public static byte[] decodeWindBase1024F(String armor) {
+        return decodeBinary(WindBase1024FCodec.decodeFrame(armor));
+    }
+
     private static void validateWireForEncoding(byte[] wireJsonUtf8) {
         if (wireJsonUtf8 == null || wireJsonUtf8.length == 0) {
             throw new IllegalArgumentException("wireJsonUtf8 must be non-empty");
