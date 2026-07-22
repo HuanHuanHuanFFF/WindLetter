@@ -1,57 +1,56 @@
-# WIND_BASE_1024F_V1 稀有汉字字母表草案
+# WIND_BASE_1024F_V1 字母表规范
 
-> 状态：待用户确认；本文件只冻结候选字母表，不代表 framing 与 bit packing 已获批准。
+> 状态：v1 字母表已确认并冻结；本文件只冻结字母表顺序，不代表 framing 与 bit packing 已冻结。
 > 日期：2026-07-22
 
 ## 1. 目标与术语
 
-本草案为 `WIND_BASE_1024F_V1` 提供恰好 1024 个单码点汉字，因此每个符号可承载 10 bit。这里的“幽灵汉字”是项目视觉命名，不是 Unicode 的正式字符类别；正式描述统一使用“稀有汉字字母表”。
+`WIND_BASE_1024F_V1` 使用恰好 1024 个互不重复的单 Unicode 码点汉字，每个符号可承载 10 bit。这里的“幽灵汉字”是项目视觉命名，不是 Unicode 的正式字符类别；协议实现只按码点精确匹配。
 
-Unicode 17 将 CJK Unified Ideographs Extension A（`U+3400..U+4DBF`）描述为 rare ideographs。本草案只使用 BMP 的 CJK Unified Ideographs，不使用 CJK Compatibility Ideographs、变体选择符、组合序列或补充平面字符。
+v1 同时使用 BMP 与补充平面汉字。Java `String` 使用 UTF-16，因此不得以 `String.length()` 作为符号数；实现必须使用 `codePoints()`、`codePointCount(...)` 或等价的码点遍历。
 
-参考：
+## 2. 字母表与索引规则
 
-- [Unicode 17 Chapter 18](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-18/)
-- [Unicode Extension A names list](https://www.unicode.org/charts/nameslist/c_3400.html)
-- [Unicode Normalization Forms](https://www.unicode.org/reports/tr15/)
+完整且唯一权威的 1024 字顺序见 [`wind-base-1024f-v1-alphabet.txt`](./wind-base-1024f-v1-alphabet.txt)。该文件是单行、无 BOM、无行尾换行的严格 UTF-8 文本。
 
-## 2. 字母表构造
+- 映射规则：`symbol = alphabet[value]`，其中 `value` 为 `0..1023`。
+- 索引从 0 开始。
+- 所有质数索引（`2..1021`，共 172 个）上的字符都包含 `風` 部件。
+- 其中 162 个在 IDS 中直接包含 `風`；索引 `7, 79, 263, 353, 547, 607, 673, 839, 937, 997` 的 10 个字符通过中间部件递归包含 `風`。
+- “质数索引含風”是构造不变量，不表示非质数索引不得出现含風字符。
 
-按零基索引定义：
+含風检查使用 BabelStone IDS 16.0 数据递归核验。IDS 受地区字形与数据版本影响，因此该检查是字表构造证据，不是解码器的运行时依赖；解码器只依赖本仓库冻结的精确码点序列。
 
-1. `0..53`：保留 `docs/風笺设计.md` 已确定的 54 字历史前缀，顺序不变。
-2. `54..1023`：依 Unicode 码点升序加入 `U+3400..U+37C9`，共 970 字。
-
-因此：
-
-- `alphabet[0] = 風`（`U+98A8`）
-- `alphabet[53] = 霾`（`U+973E`）
-- `alphabet[54] = 㐀`（`U+3400`）
-- `alphabet[1023] = 㟉`（`U+37C9`）
-
-历史前缀中有少量较常见的气象字，这是兼容旧设计的有意保留；新增 970 字全部来自 Extension A 的稀有字区。
-
-## 3. 权威字表文件
-
-完整 1024 字见 [`wind-base-1024f-v1-alphabet.txt`](./wind-base-1024f-v1-alphabet.txt)。文件按 32 行 × 32 字排版；规范字母表是删除 `CR`/`LF` 后按行连接得到的 1024 个 Unicode 标量，任何其他空白都不是字母表内容。
-
-映射规则为 `symbol = alphabet[value]`，其中 `value` 范围为 `0..1023`。解码器必须按 Unicode 码点精确匹配，不得按字形、读音、简繁关系或兼容等价关系匹配。
-
-## 4. 机器校验结果
+## 3. 机器校验结果
 
 - Unicode 标量数：1024
 - 唯一码点数：1024
-- UTF-16 code unit 数：1024（全部位于 BMP，无 surrogate pair）
-- 每个码点 General Category：`Lo` / Other Letter
-- NFC：不得改变字母表
-- NFKC：不得改变字母表
-- UTF-8 长度：3072 bytes
-- 去除换行后的 UTF-8 SHA-256：`8cb9615f910e94783164c8dd08651cad16e260266c03b49fc44da14f326bbf2a`
+- UTF-16 code unit 数：1291
+- 补充平面码点数：267
+- 严格 UTF-8 长度：3339 bytes
+- UTF-8 BOM：无
+- 换行与其他空白：无
+- Unicode 17 已分配字符：1024 / 1024
+- Unicode General Category：全部为 `Lo` / Other Letter
+- CJK Compatibility Ideographs：0
+- Unicode decomposition mapping：0
+- NFC / NFKC：不改变字母表
+- 0 下标质数索引：172
+- 递归含 `風`：172 / 172
+- UTF-8 SHA-256：`255519fb0d061d88fbd9a8d216ceb6494e09e9fb72e80d7c1815ca4aef794eba`
+- `alphabet[0] = 𩘫`（`U+2962B`）
+- `alphabet[1023] = 㓧`（`U+34E7`）
 
-## 5. 尚未冻结的协议项
+合法性以 Unicode 17 `UnicodeData.txt` 核验；结构检查参考 [BabelStone IDS Database](https://www.babelstone.co.uk/CJK/IDS.HTML)。
 
-本草案没有决定 bit packing、尾部不足 10 bit 的处理、长度恢复、版本/framing、校验和、文本前缀、大小限制和 strict decoder 错误优先级。这些必须在阶段 7 armor contract 中单独批准并测试。
+任何字符、顺序或文件编码变化都会改变映射和哈希，必须作为新的字表版本处理，不能静默替换。
 
-## 6. 已知 P2
+## 4. 尚未冻结的协议项
 
-Extension A 的字体覆盖不如常用汉字，一些聊天平台可能显示为方框；这通常不改变底层码点和复制粘贴结果，但影响可读性与视觉效果。阶段 7 应在目标平台做真实 round-trip 与字体展示 smoke，并在正式冻结前决定是否改用覆盖率更高的稀有 BMP 字集合。
+本规范尚未决定 bit packing、尾部不足 10 bit 的处理、原始长度恢复、版本/framing、校验和、文本前缀、大小限制和 strict decoder 错误优先级。这些必须在阶段 7 armor contract 中单独批准并测试。
+
+## 5. 已知 P2
+
+- 补充平面字符在 Java 中占用 surrogate pair；若实现误用 `char` 或 `String.length()` 会破坏索引，阶段 7 必须用自动化测试锁定码点处理。
+- 生僻字和补充平面字符的字体、输入框、聊天平台覆盖不稳定，可能显示为方框或在不合规平台被替换；阶段 7 需做 UTF-8 round-trip 与目标平台 smoke。
+- IDS 的“含風”结构判定不是 Unicode 规范属性且可能随数据版本或地区字形变化；它只用于设计验证，不影响已冻结映射及解码正确性。
