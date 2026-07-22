@@ -553,7 +553,7 @@ mvn -q test
 
 2026-07-22 重新审计确认：`windletter-armor` 与 `windletter-testkit` 都尚无 Java 源码；正式 v1.0 协议只定义 outer JSON wire，armor 是不得改变协议语义的项目传输扩展；API 虽预留四种 `ArmorFormat`，Runtime 仍明确只支持 raw JSON。指定 JDK 17 下 `mvn -q test` 基线成功。
 
-阶段 7 已冻结共同 binary frame、canonical Base64URL、WIND_BASE_1024F_V1 10-bit packing、text auto-detect 和 strict error priority。下一开发闭环是 Task 2：在 `windletter-armor` 实现 binary frame 与 Base64URL codec，并建立真实 round-trip/负例测试；完成后立即提交并 push，再继续 WindBase1024F。
+阶段 7 Task 2 已完成共同 binary frame 与 canonical Base64URL codec，实现 exact UTF-8 bytes、大小上限、CRC-32、strict UTF-8 和规定错误优先级；指定 JDK 17 全仓 89 suites / 754 tests，0 failure、0 error、0 skipped。下一开发闭环是 Task 3：实现码点安全的 WIND_BASE_1024F_V1 10-bit packing、冻结字表 resource 与确定性向量。
 
 阶段内 P1 是 `DecryptRequest` 输入歧义、解码资源上限、补充平面码点处理和公开错误收敛；它们必须在对应任务中解决。阶段 1—6 的既有 P2 与阶段 7 的 streaming、字体平台、测试去重、跨语言互操作等 P2 均记录后继续推进，不先于 Demo 主链。
 

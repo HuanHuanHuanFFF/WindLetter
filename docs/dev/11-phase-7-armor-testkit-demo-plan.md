@@ -1,6 +1,6 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
-> 状态：进行中
+> 状态：进行中；Task 1—2 已完成，下一步 Task 3 WIND_BASE_1024F_V1 codec
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`
 
@@ -94,19 +94,20 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 
 每个任务独立测试、独立 commit，并在 commit 后立即 push。
 
-### Task 1：阶段审计与 contract
+### Task 1：阶段审计与 contract（已完成）
 
 - 本计划与总体计划状态同步。
 - 完成条件：真实基线、frame、三种格式、auto-detect、错误顺序和阶段门均明确。
 
-### Task 2：Binary frame + Base64URL codec
+### Task 2：Binary frame + Base64URL codec（已完成）
 
 - 在 `windletter-armor` 实现 frame、strict UTF-8、大小限制、CRC-32 与 canonical Base64URL。
 - 正例覆盖 exact bytes round-trip、空 JSON、非 ASCII UTF-8 边界和最大值邻接。
 - 负例覆盖 magic、version、length、CRC、padding、空白、非法字符、非规范 Base64URL、无效 UTF-8和超限。
 - 完成条件：armor 模块相关测试全部通过，现有全仓测试无回归。
+- 完成证据：2026-07-22 使用指定 JDK 17，聚焦测试与 `mvn -q test` 均通过；全仓 89 suites / 754 tests，0 failure、0 error、0 skipped。
 
-### Task 3：WIND_BASE_1024F_V1 codec
+### Task 3：WIND_BASE_1024F_V1 codec（下一步）
 
 - 将冻结字表作为 jar resource 纳入 `windletter-armor`，启动时校验 1024 码点、唯一性与 SHA-256。
 - 实现 10-bit MSB-first packing/unpacking、严格码点解析、尾部零 bit 与 canonical 校验。
