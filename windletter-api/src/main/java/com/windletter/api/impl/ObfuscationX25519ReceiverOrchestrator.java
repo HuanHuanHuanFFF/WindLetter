@@ -1,9 +1,6 @@
 package com.windletter.api.impl;
 
-import com.windletter.api.WindLetterReceiver;
-import com.windletter.api.enums.ArmorFormat;
 import com.windletter.api.enums.DecryptStatus;
-import com.windletter.api.enums.VerificationPolicy;
 import com.windletter.api.enums.VerificationStatus;
 import com.windletter.api.model.DecryptRequest;
 import com.windletter.api.model.DecryptResult;
@@ -12,9 +9,7 @@ import com.windletter.api.model.SenderIdentity;
 import com.windletter.api.spi.DecryptionKeyLease;
 import com.windletter.api.spi.IdentityService;
 import com.windletter.api.spi.RecipientKeyStore;
-import com.windletter.api.spi.SenderPublicKeyResolver;
 import com.windletter.api.spi.VerificationKeyMaterial;
-import com.windletter.api.spi.X25519PublicKeyMaterial;
 import com.windletter.core.error.ErrorCode;
 import com.windletter.crypto.api.X25519PrivateKeyHandle;
 import com.windletter.crypto.bc.BouncyCastleA256GcmCrypto;
@@ -23,20 +18,17 @@ import com.windletter.crypto.bc.BouncyCastleEd25519Crypto;
 import com.windletter.crypto.bc.BouncyCastleHkdfCrypto;
 import com.windletter.crypto.bc.BouncyCastleX25519Crypto;
 import com.windletter.protocol.ProtocolException;
-import com.windletter.protocol.flow.PublicX25519SignedReceiver;
-import com.windletter.protocol.flow.PublicX25519UnsignedReceiver;
-import com.windletter.protocol.flow.SenderX25519PublicKeyResolver;
+import com.windletter.protocol.flow.ObfuscationX25519SignedReceiver;
+import com.windletter.protocol.flow.ObfuscationX25519UnsignedReceiver;
 import com.windletter.protocol.key.Ed25519KeyId;
-import com.windletter.protocol.key.PublicX25519KekDeriver;
+import com.windletter.protocol.key.ObfuscationX25519KeyDeriver;
 import com.windletter.protocol.key.X25519KeyId;
 import com.windletter.protocol.model.ProtocolAuthenticationStatus;
 import com.windletter.protocol.model.ProtocolPayload;
 import com.windletter.protocol.model.ProtocolSenderIdentity;
-import com.windletter.protocol.parser.JacksonOuterWireParser;
+import com.windletter.protocol.routing.ObfuscationX25519CekRecovery;
 import com.windletter.protocol.signature.Ed25519VerificationKeyResolver;
 import com.windletter.protocol.signature.TrustedEd25519Key;
-import com.windletter.protocol.wire.ProtectedHeader;
-import com.windletter.protocol.wire.WindLetter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -44,112 +36,45 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-/** Default receiver facade backed by strict production Wind Letter protocol flows. */
-public final class DefaultWindLetterReceiver implements WindLetterReceiver {
+/** Obfuscation X25519 receiver mapping with one candidate-set protocol invocation. */
+final class ObfuscationX25519ReceiverOrchestrator {
 
     private final RecipientKeyStore recipientKeys;
-    private final SenderPublicKeyResolver senderKeys;
     private final IdentityService identities;
-    private final JacksonOuterWireParser parser = new JacksonOuterWireParser();
-    private final PublicX25519UnsignedReceiver publicX25519Unsigned;
-    private final PublicX25519SignedReceiver publicX25519Signed;
-    private final PublicHybridReceiverOrchestrator publicHybrid;
-    private final ObfuscationX25519ReceiverOrchestrator obfuscationX25519;
+    private final ObfuscationX25519UnsignedReceiver unsignedReceiver;
+    private final ObfuscationX25519SignedReceiver signedReceiver;
 
-    public DefaultWindLetterReceiver(
+    ObfuscationX25519ReceiverOrchestrator(
         RecipientKeyStore recipientKeys,
-        SenderPublicKeyResolver senderKeys,
         IdentityService identities
     ) {
-        this.recipientKeys = requireDependency(recipientKeys, "recipientKeys");
-        this.senderKeys = requireDependency(senderKeys, "senderKeys");
-        this.identities = requireDependency(identities, "identities");
-
-        PublicX25519KekDeriver kekDeriver = new PublicX25519KekDeriver(
+        this.recipientKeys = recipientKeys;
+        this.identities = identities;
+        ObfuscationX25519KeyDeriver keyDeriver = new ObfuscationX25519KeyDeriver(
             new BouncyCastleX25519Crypto(),
             new BouncyCastleHkdfCrypto()
         );
-        BouncyCastleA256KeyWrapCrypto keyWrap = new BouncyCastleA256KeyWrapCrypto();
+        ObfuscationX25519CekRecovery cekRecovery = new ObfuscationX25519CekRecovery(
+            keyDeriver,
+            new BouncyCastleA256KeyWrapCrypto()
+        );
         BouncyCastleA256GcmCrypto gcm = new BouncyCastleA256GcmCrypto();
-        this.publicX25519Unsigned = new PublicX25519UnsignedReceiver(kekDeriver, keyWrap, gcm);
-        this.publicX25519Signed = new PublicX25519SignedReceiver(
-            kekDeriver,
-            keyWrap,
+        this.unsignedReceiver = new ObfuscationX25519UnsignedReceiver(cekRecovery, gcm);
+        this.signedReceiver = new ObfuscationX25519SignedReceiver(
+            cekRecovery,
             gcm,
             new BouncyCastleEd25519Crypto()
         );
-        this.publicHybrid = new PublicHybridReceiverOrchestrator(
-            recipientKeys,
-            senderKeys,
-            identities
-        );
-        this.obfuscationX25519 = new ObfuscationX25519ReceiverOrchestrator(
-            recipientKeys,
-            identities
-        );
     }
 
-    @Override
-    public DecryptResult decrypt(DecryptRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("request must not be null");
-        }
-        return decryptWithPolicy(request, request.verificationPolicy());
-    }
-
-    @Override
-    public DecryptResult decryptAndVerify(DecryptRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("request must not be null");
-        }
-        return decryptWithPolicy(request, VerificationPolicy.REQUIRE_SIGNED_VALID);
-    }
-
-    private DecryptResult decryptWithPolicy(
-        DecryptRequest request,
-        VerificationPolicy verificationPolicy
-    ) {
-        requireRawWire(request);
-
-        final WindLetter parsed;
-        try {
-            parsed = parser.parse(request.wireJson());
-        } catch (ProtocolException failure) {
-            return mapProtocolFailure(failure);
-        }
-
-        ProtectedHeader header = parsed.protectedHeader();
-        boolean publicMode = "public".equals(header.windMode());
-        boolean obfuscationMode = "obfuscation".equals(header.windMode());
-        boolean x25519Profile = "X25519".equals(header.keyAlg());
-        boolean hybridProfile = "X25519ML-KEM-768".equals(header.keyAlg());
-        boolean signed = "wind+jws".equals(header.cty());
-        boolean unsigned = "wind+inner".equals(header.cty());
-        if ((!publicMode && !obfuscationMode)
-            || (!x25519Profile && !hybridProfile)
-            || (!signed && !unsigned)) {
-            return invalidMessage();
-        }
-        if (unsigned && verificationPolicy == VerificationPolicy.REQUIRE_SIGNED_VALID) {
-            return invalidMessage();
-        }
-        if (obfuscationMode) {
-            return x25519Profile
-                ? obfuscationX25519.decrypt(request, signed)
-                : invalidMessage();
-        }
-        if (hybridProfile) {
-            return publicHybrid.decrypt(request, signed);
-        }
-
+    DecryptResult decrypt(DecryptRequest request, boolean signed) {
         List<DecryptionKeyLease> leases = openRecipientLeases(request);
         Throwable pending = null;
         try {
-            List<X25519PrivateKeyHandle> candidates = validatedX25519Candidates(leases);
-            if (signed) {
-                return receiveSigned(request.wireJson(), candidates);
-            }
-            return receiveUnsigned(request.wireJson(), candidates);
+            List<X25519PrivateKeyHandle> candidates = validatedCandidates(leases);
+            return signed
+                ? receiveSigned(request.wireJson(), candidates)
+                : receiveUnsigned(request.wireJson(), candidates);
         } catch (RuntimeException | Error failure) {
             pending = failure;
             throw failure;
@@ -160,20 +85,26 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
 
     private DecryptResult receiveUnsigned(
         String wireJson,
-        List<X25519PrivateKeyHandle> recipientPrivateKeys
+        List<X25519PrivateKeyHandle> candidates
     ) {
         try {
-            PublicX25519UnsignedReceiver.Result result = publicX25519Unsigned.receive(
-                new PublicX25519UnsignedReceiver.Request(
-                    wireJson,
-                    senderX25519Resolver(),
-                    recipientPrivateKeys
-                )
+            ObfuscationX25519UnsignedReceiver.Result result = unsignedReceiver.receive(
+                new ObfuscationX25519UnsignedReceiver.Request(wireJson, candidates)
             );
             if (result.authenticationStatus() != ProtocolAuthenticationStatus.UNSIGNED) {
-                throw new IllegalStateException("unsigned flow returned an invalid authentication status");
+                throw new IllegalStateException(
+                    "unsigned obfuscation flow returned invalid auth status"
+                );
             }
-            return unsignedSuccess(result.payload(), result.messageId(), result.timestamp());
+            return new DecryptResult(
+                DecryptStatus.SUCCESS,
+                toApiPayload(result.payload()),
+                null,
+                VerificationStatus.UNSIGNED,
+                null,
+                result.messageId(),
+                result.timestamp()
+            );
         } catch (ProtocolException failure) {
             return mapProtocolFailure(failure);
         }
@@ -181,54 +112,34 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
 
     private DecryptResult receiveSigned(
         String wireJson,
-        List<X25519PrivateKeyHandle> recipientPrivateKeys
+        List<X25519PrivateKeyHandle> candidates
     ) {
         TrustedSigningResolver signingResolver = new TrustedSigningResolver(identities);
         try {
-            PublicX25519SignedReceiver.Result result = publicX25519Signed.receive(
-                new PublicX25519SignedReceiver.Request(
+            ObfuscationX25519SignedReceiver.Result result = signedReceiver.receive(
+                new ObfuscationX25519SignedReceiver.Request(
                     wireJson,
-                    senderX25519Resolver(),
                     signingResolver,
-                    recipientPrivateKeys
+                    candidates
                 )
             );
             if (result.authenticationStatus() != ProtocolAuthenticationStatus.SIGNED_VALID) {
-                throw new IllegalStateException("signed flow returned an invalid authentication status");
+                throw new IllegalStateException(
+                    "signed obfuscation flow returned invalid auth status"
+                );
             }
-            SenderIdentity identity = signingResolver.authenticatedIdentity(result.authenticatedSender());
-            return signedSuccess(
-                result.payload(),
+            return new DecryptResult(
+                DecryptStatus.SUCCESS,
+                toApiPayload(result.payload()),
+                signingResolver.authenticatedIdentity(result.authenticatedSender()),
+                VerificationStatus.SIGNED_VALID,
+                null,
                 result.messageId(),
-                result.timestamp(),
-                identity
+                result.timestamp()
             );
         } catch (ProtocolException failure) {
             return mapProtocolFailure(failure);
         }
-    }
-
-    private SenderX25519PublicKeyResolver senderX25519Resolver() {
-        return expectedKid -> {
-            Optional<X25519PublicKeyMaterial> resolved = senderKeys.resolveX25519ByKid(expectedKid);
-            if (resolved == null) {
-                throw new IllegalStateException("sender public-key resolver returned null");
-            }
-            if (resolved.isEmpty()) {
-                return Optional.empty();
-            }
-
-            X25519PublicKeyMaterial material = resolved.get();
-            byte[] publicKey = material.publicKey();
-            String derivedKid = X25519KeyId.derive(publicKey);
-            if (!expectedKid.equals(material.kid()) || !expectedKid.equals(derivedKid)) {
-                clear(publicKey);
-                throw new IllegalStateException(
-                    "sender X25519 key record does not match the requested kid"
-                );
-            }
-            return Optional.of(publicKey);
-        };
     }
 
     private List<DecryptionKeyLease> openRecipientLeases(DecryptRequest request) {
@@ -239,7 +150,7 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
         return new ArrayList<>(opened);
     }
 
-    private static List<X25519PrivateKeyHandle> validatedX25519Candidates(
+    private static List<X25519PrivateKeyHandle> validatedCandidates(
         List<DecryptionKeyLease> leases
     ) {
         List<X25519PrivateKeyHandle> candidates = new ArrayList<>(leases.size());
@@ -258,7 +169,9 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
                     );
                 }
                 if (!seenKids.add(derivedKid)) {
-                    throw new IllegalStateException("recipient key store returned duplicate X25519 keys");
+                    throw new IllegalStateException(
+                        "recipient key store returned duplicate X25519 keys"
+                    );
                 }
                 candidates.add(handle);
             } finally {
@@ -266,39 +179,6 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
             }
         }
         return List.copyOf(candidates);
-    }
-
-    private static DecryptResult unsignedSuccess(
-        ProtocolPayload protocolPayload,
-        String messageId,
-        long timestamp
-    ) {
-        return new DecryptResult(
-            DecryptStatus.SUCCESS,
-            toApiPayload(protocolPayload),
-            null,
-            VerificationStatus.UNSIGNED,
-            null,
-            messageId,
-            timestamp
-        );
-    }
-
-    private static DecryptResult signedSuccess(
-        ProtocolPayload protocolPayload,
-        String messageId,
-        long timestamp,
-        SenderIdentity senderIdentity
-    ) {
-        return new DecryptResult(
-            DecryptStatus.SUCCESS,
-            toApiPayload(protocolPayload),
-            senderIdentity,
-            VerificationStatus.SIGNED_VALID,
-            null,
-            messageId,
-            timestamp
-        );
     }
 
     private static Payload toApiPayload(ProtocolPayload payload) {
@@ -325,10 +205,6 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
                 null
             );
         }
-        return invalidMessage();
-    }
-
-    private static DecryptResult invalidMessage() {
         return new DecryptResult(
             DecryptStatus.INVALID_MESSAGE,
             null,
@@ -338,18 +214,6 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
             null,
             null
         );
-    }
-
-    private static void requireRawWire(DecryptRequest request) {
-        if (request.armorFormat() != ArmorFormat.NONE
-            || request.armor() != null
-            || request.armorBytes() != null
-            || request.wireJson() == null
-            || request.wireJson().isBlank()) {
-            throw new IllegalArgumentException(
-                "Phase 6 receiver accepts only one raw wireJson with ArmorFormat.NONE"
-            );
-        }
     }
 
     private static void closeAll(List<DecryptionKeyLease> leases, Throwable pending) {
@@ -382,13 +246,6 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
         throw (Error) closeFailure;
     }
 
-    private static <T> T requireDependency(T value, String field) {
-        if (value == null) {
-            throw new IllegalArgumentException(field + " must not be null");
-        }
-        return value;
-    }
-
     private static void clear(byte[] value) {
         if (value != null) {
             Arrays.fill(value, (byte) 0);
@@ -410,25 +267,28 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
                 expectedKid
             );
             if (verification == null) {
-                throw new IllegalStateException("identity service returned null verification result");
+                throw new IllegalStateException(
+                    "identity service returned null verification result"
+                );
             }
             if (verification.isEmpty()) {
                 return Optional.empty();
             }
-
             VerificationKeyMaterial material = verification.get();
             byte[] publicKey = material.ed25519PublicKey();
             try {
                 String derivedKid = Ed25519KeyId.derive(publicKey);
-                if (!expectedKid.equals(material.signingKid()) || !expectedKid.equals(derivedKid)) {
+                if (!expectedKid.equals(material.signingKid())
+                    || !expectedKid.equals(derivedKid)) {
                     throw new IllegalStateException(
                         "verification key record does not match the requested kid"
                     );
                 }
-
                 Optional<SenderIdentity> identity = identities.resolveSenderBySigningKid(expectedKid);
                 if (identity == null) {
-                    throw new IllegalStateException("identity service returned null sender result");
+                    throw new IllegalStateException(
+                        "identity service returned null sender result"
+                    );
                 }
                 SenderIdentity senderIdentity = identity.orElseThrow(
                     () -> new IllegalStateException(
