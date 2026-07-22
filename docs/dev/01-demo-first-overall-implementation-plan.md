@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 6 `windletter-api` 真实 raw-wire 编排已完成并封板；用户已允许进入阶段 7 `Armor、Testkit 与可运行 Demo`，`WIND_BASE_1024F_V1` 字表已确认。
+> 状态：阶段 1—7 已完成并封板；当前定义的 WindLetter v1.0 Demo 已真实跑通，等待用户确认 Demo 后优化范围。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -146,7 +146,7 @@ Outer 与 inner 都必须：
 | 4 | obfuscation × X25519 × signed/unsigned | protocol | 已完成并封板（606 tests；0 failure/error/skip） |
 | 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 已完成并封板（694 tests；0 failure/error/skip） |
 | 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 已完成（2026-07-22） |
-| 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 进行中（Task 1—6 已完成） |
+| 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 已完成并封板（919 tests；Demo 实跑） |
 
 ## 6. 阶段 1：Public X25519 Unsigned 真实纵向主链
 
@@ -553,8 +553,8 @@ mvn -q test
 
 2026-07-22 阶段启动审计时，`windletter-armor` 与 `windletter-testkit` 都尚无 Java 源码；正式 v1.0 协议只定义 outer JSON wire，因此本阶段把 armor 限定为不得改变协议语义的项目传输扩展。该段为启动基线，后续实际进展以以下记录为准。
 
-阶段 7 Task 2—6 已完成共同 binary frame、canonical Base64URL、码点安全的 WIND_BASE_1024F_V1、公开 API 编排、最终 testkit 和非 JUnit Demo。命令 `mvn -q -pl windletter-testkit -am -Pdemo verify` 已实际跑通四个成功场景及 `NOT_FOR_ME`、key lease 前 `INVALID_MESSAGE`；同次验证为 94 suites / 919 tests，0 failure、0 error、0 skipped。运行说明见 `docs/dev/12-windletter-v1-demo-run.md`。下一闭环是 Task 7：执行 clean verify、最终安全/完整性复查并封板。
+阶段 7 Task 1—7 已全部完成。指定 JDK 17 的 fresh `mvn -q clean verify` 为 94 suites / 919 tests，0 failure、0 error、0 skipped；随后 `mvn -q -pl windletter-testkit -am -Pdemo verify` 再次实际跑通四个成功场景、`NOT_FOR_ME`、key lease 前 `INVALID_MESSAGE` 和 `DEMO_OK successes=4`。最终复查 P0=0、P1=0；运行说明见 `docs/dev/12-windletter-v1-demo-run.md`，完整封板报告见 `docs/dev/13-phase-7-completion-report.md`。
 
 阶段 7 已识别的 `DecryptRequest` 输入歧义、解码资源上限、补充平面码点处理和公开错误收敛四项 P1 均已解决。阶段 1—6 的既有 P2 与阶段 7 的 streaming、字体平台、测试去重、跨语言互操作等 P2 均记录后继续推进，不先于 Demo 主链。
 
-分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音保持未纳入。阶段 7 全部任务、fresh `mvn -q clean verify` 和实际 Demo 入口完成前，不声明完整 Demo。
+分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音保持未纳入。当前定义的 WindLetter v1.0 Demo 已完成；等待用户确认后再进入 P2、架构、性能或扩展优化。

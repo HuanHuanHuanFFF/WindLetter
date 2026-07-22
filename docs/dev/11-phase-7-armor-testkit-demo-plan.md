@@ -1,6 +1,6 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
-> 状态：进行中；Task 1—6 已完成，下一步 Task 7 阶段封板
+> 状态：已完成；Task 1—7 全部通过，WindLetter v1.0 Demo 已封板
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`
 
@@ -142,13 +142,14 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 - 运行入口：`mvn -q -pl windletter-testkit -am -Pdemo verify`；详细说明见 `docs/dev/12-windletter-v1-demo-run.md`。
 - 完成证据：非 JUnit `main` 已实际运行四个代表场景，覆盖两种 mode、两种 key profile、signed/unsigned、Base64URL/WindBase/binary、多收件人与 obfuscation 8 槽填充；同时输出并自检 `NOT_FOR_ME` 和 key lease 前 `INVALID_MESSAGE`。同次 verify 为 94 suites / 919 tests，0 failure、0 error、0 skipped。
 
-### Task 7：阶段封板（下一步）
+### Task 7：阶段封板（已完成）
 
 - 使用指定 JDK 17 运行 `mvn -q clean verify`。
 - 汇总全部 Surefire 报告，要求 0 failure、0 error、0 skipped。
 - 实际运行 Demo 命令并核对输出。
 - 复查 P0/P1、安全错误映射、secret 生命周期和完整矩阵；记录但不阻塞的 P2。
 - 更新总体计划与阶段报告，等待用户确认 Demo 后优化阶段。
+- 完成证据：指定 JDK 17 的 fresh `mvn -q clean verify` 为 94 suites / 919 tests，0 failure、0 error、0 skipped；随后正式 Demo 命令再次输出四条成功链、`NOT_FOR_ME`、key lease 前 `INVALID_MESSAGE` 和 `DEMO_OK successes=4`。最终复查 P0=0、P1=0；P2 及影响见 `docs/dev/13-phase-7-completion-report.md`。
 
 ## 5. 阶段完成判定
 
