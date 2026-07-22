@@ -56,16 +56,18 @@ class DecryptRequestTest {
     }
 
     @Test
-    void shouldAllowBinaryFormatWhenArmorMissing() {
-        DecryptRequest request = new DecryptRequest(
-            "{\"protected\":\"x\"}",
-            null,
-            new byte[] {1, 2},
-            ArmorFormat.BINARY,
-            new RecipientIdentityRef("me", null),
-            VerificationPolicy.AUTO_BY_CTY
+    void shouldRejectMultipleInputRepresentations() {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new DecryptRequest(
+                "{\"protected\":\"x\"}",
+                null,
+                new byte[] {1, 2},
+                ArmorFormat.BINARY,
+                new RecipientIdentityRef("me", null),
+                VerificationPolicy.AUTO_BY_CTY
+            )
         );
-        assertEquals(ArmorFormat.BINARY, request.armorFormat());
     }
 
     @Test

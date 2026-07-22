@@ -127,6 +127,21 @@ public final class WindLetterArmor {
         return decodeBinary(WindBase1024FCodec.decodeFrame(armor));
     }
 
+    /** Auto-detects the two disjoint v1 text alphabets and decodes the selected format strictly. */
+    public static byte[] decodeTextAuto(String armor) {
+        if (armor == null || armor.isEmpty()) {
+            throw malformed(ArmorException.Reason.INVALID_INPUT, "text armor must be non-empty");
+        }
+        boolean ascii = true;
+        for (int i = 0; i < armor.length(); i++) {
+            if (armor.charAt(i) > 0x7f) {
+                ascii = false;
+                break;
+            }
+        }
+        return ascii ? decodeBase64Url(armor) : decodeWindBase1024F(armor);
+    }
+
     private static void validateWireForEncoding(byte[] wireJsonUtf8) {
         if (wireJsonUtf8 == null || wireJsonUtf8.length == 0) {
             throw new IllegalArgumentException("wireJsonUtf8 must be non-empty");

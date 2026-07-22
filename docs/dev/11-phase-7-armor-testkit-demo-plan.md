@@ -1,6 +1,6 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
-> 状态：进行中；Task 1—3 已完成，下一步 Task 4 API Sender/Receiver armor 编排
+> 状态：进行中；Task 1—4 已完成，下一步 Task 5 最终 testkit 与负例矩阵
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`
 
@@ -115,7 +115,7 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 - 完成条件：任何 `String.length()`/`char` 误用都能被测试捕获，三种 armor 对同一 frame 恢复 identical bytes。
 - 完成证据：冻结字表 resource 与设计文件逐 byte 相同且 SHA-256 为 `255519fb0d061d88fbd9a8d216ceb6494e09e9fb72e80d7c1815ca4aef794eba`；固定向量、全部尾长与严格负例通过；指定 JDK 17 全仓 91 suites / 761 tests，0 failure、0 error、0 skipped。
 
-### Task 4：API Sender/Receiver armor 编排（下一步）
+### Task 4：API Sender/Receiver armor 编排（已完成）
 
 - `windletter-api` 依赖 `windletter-armor`。
 - Sender 先生成真实 raw outer JSON，再按请求格式生成 text/binary armor；`EncryptedMessage.wireJson` 仍保留用于观测和调试。
@@ -123,8 +123,9 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 - Receiver 在任何 key lease 打开前完成 armor 解码、strict UTF-8 与 outer parse。
 - 非法 armor 映射为统一 `INVALID_MESSAGE`，本地配置/资源错误仍抛本地异常。
 - 完成条件：全部 8 个 profile 经 `NONE`、`BASE64URL`、`WIND_BASE_1024F_V1`、`BINARY` 的公开 API round-trip。
+- 完成证据：公开 API 已覆盖 8 profiles × 4 formats × text/binary payload；Base64URL/WindBase 文本自动识别通过，损坏 armor 在 recipient key lease 打开前统一返回 `INVALID_MESSAGE`；`DecryptRequest` 已强制三种输入表示 exact-one。指定 JDK 17 全仓 811 tests，0 failure、0 error、0 skipped。
 
-### Task 5：最终 testkit 与负例矩阵
+### Task 5：最终 testkit 与负例矩阵（下一步）
 
 - 建立生产链使用的内存 Demo key repository，不用 mock 核心协议或密码学。
 - 覆盖 public/obfuscation × X25519/Hybrid × signed/unsigned × 所有 armor。
@@ -157,12 +158,12 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 
 ## 6. 当前风险与推迟项
 
-### 阶段内必须解决
+### 阶段内已解决
 
-- P1：`DecryptRequest` raw 与 armor 可同时存在，可能造成调用方和实现选择不同表示；API 接线前必须 exact-one。
-- P1：对不可信 armor 若无编码长度和 frame length 上限，可能造成内存/CPU 放大；codec 对外前必须限流。
-- P1：WindBase 若按 UTF-16 `char` 处理，267 个补充平面字符会破坏映射；实现必须码点化并测试。
-- P1：armor 详细失败若透出公开 API，会形成格式/解析 oracle；必须统一映射。
+- 已解决 P1：`DecryptRequest` 强制 raw/text/binary exact-one，并校验显式格式与表示一致。
+- 已解决 P1：三种 codec 均在分配和解码前执行编码长度与 frame length 上限。
+- 已解决 P1：WindBase 按 Unicode code point 遍历，并用 267 个补充平面字及 surrogate 负例锁定。
+- 已解决 P1：Receiver 只将 `ArmorException` 收敛为 `INVALID_MESSAGE`，本地资源/配置异常仍作为本地故障抛出。
 
 ### Demo 后可继续优化的 P2
 

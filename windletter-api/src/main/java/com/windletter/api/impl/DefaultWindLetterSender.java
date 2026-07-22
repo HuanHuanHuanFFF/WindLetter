@@ -1,6 +1,7 @@
 package com.windletter.api.impl;
 
 import com.windletter.api.WindLetterSender;
+import com.windletter.armor.WindLetterArmor;
 import com.windletter.api.enums.ArmorFormat;
 import com.windletter.api.enums.KeyAlgProfile;
 import com.windletter.api.enums.WindMode;
@@ -30,6 +31,7 @@ import com.windletter.protocol.key.PublicX25519KekDeriver;
 import com.windletter.protocol.key.X25519KeyId;
 import com.windletter.protocol.model.ProtocolPayload;
 import com.windletter.protocol.recipient.PublicX25519RecipientBuilder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -94,18 +96,18 @@ public final class DefaultWindLetterSender implements WindLetterSender {
     @Override
     public EncryptedMessage encrypt(EncryptRequest request) {
         requireRequest(request);
-        requireRawWire(request.armorFormat(), request.customHeaders());
+        requireSupportedOptions(request.customHeaders());
         if (request.mode() == WindMode.PUBLIC
             && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
-            return publicHybrid.encrypt(request);
+            return armorMessage(publicHybrid.encrypt(request), request.armorFormat());
         }
         if (request.mode() == WindMode.OBFUSCATION
             && request.keyAlgProfile() == KeyAlgProfile.X25519) {
-            return obfuscationX25519.encrypt(request);
+            return armorMessage(obfuscationX25519.encrypt(request), request.armorFormat());
         }
         if (request.mode() == WindMode.OBFUSCATION
             && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
-            return obfuscationHybrid.encrypt(request);
+            return armorMessage(obfuscationHybrid.encrypt(request), request.armorFormat());
         }
         requirePublicX25519(request.mode(), request.keyAlgProfile());
 
@@ -124,7 +126,7 @@ public final class DefaultWindLetterSender implements WindLetterSender {
                     recipientPublicKeys
                 )
             );
-            return rawMessage(result.wireJson());
+            return armorMessage(rawMessage(result.wireJson()), request.armorFormat());
         } finally {
             clearAll(recipientPublicKeys);
         }
@@ -133,18 +135,18 @@ public final class DefaultWindLetterSender implements WindLetterSender {
     @Override
     public EncryptedMessage encryptAndSign(EncryptAndSignRequest request) {
         requireRequest(request);
-        requireRawWire(request.armorFormat(), request.customHeaders());
+        requireSupportedOptions(request.customHeaders());
         if (request.mode() == WindMode.PUBLIC
             && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
-            return publicHybrid.encryptAndSign(request);
+            return armorMessage(publicHybrid.encryptAndSign(request), request.armorFormat());
         }
         if (request.mode() == WindMode.OBFUSCATION
             && request.keyAlgProfile() == KeyAlgProfile.X25519) {
-            return obfuscationX25519.encryptAndSign(request);
+            return armorMessage(obfuscationX25519.encryptAndSign(request), request.armorFormat());
         }
         if (request.mode() == WindMode.OBFUSCATION
             && request.keyAlgProfile() == KeyAlgProfile.X25519_ML_KEM_768) {
-            return obfuscationHybrid.encryptAndSign(request);
+            return armorMessage(obfuscationHybrid.encryptAndSign(request), request.armorFormat());
         }
         requirePublicX25519(request.mode(), request.keyAlgProfile());
 
@@ -171,7 +173,7 @@ public final class DefaultWindLetterSender implements WindLetterSender {
                     recipientPublicKeys
                 )
             );
-            return rawMessage(result.wireJson());
+            return armorMessage(rawMessage(result.wireJson()), request.armorFormat());
         } finally {
             clearAll(recipientPublicKeys);
         }
@@ -308,10 +310,40 @@ public final class DefaultWindLetterSender implements WindLetterSender {
         return new EncryptedMessage(wireJson, null, null, ArmorFormat.NONE);
     }
 
-    private static void requireRawWire(ArmorFormat format, java.util.Map<String, Object> headers) {
-        if (format != ArmorFormat.NONE) {
-            throw new IllegalArgumentException("Phase 6 sender supports only ArmorFormat.NONE");
+    private static EncryptedMessage armorMessage(
+        EncryptedMessage rawMessage,
+        ArmorFormat format
+    ) {
+        String wireJson = rawMessage.wireJson();
+        byte[] wireJsonUtf8 = wireJson.getBytes(StandardCharsets.UTF_8);
+        try {
+            return switch (format) {
+                case NONE -> rawMessage;
+                case BASE64URL -> new EncryptedMessage(
+                    wireJson,
+                    WindLetterArmor.encodeBase64Url(wireJsonUtf8),
+                    null,
+                    format
+                );
+                case WIND_BASE_1024F_V1 -> new EncryptedMessage(
+                    wireJson,
+                    WindLetterArmor.encodeWindBase1024F(wireJsonUtf8),
+                    null,
+                    format
+                );
+                case BINARY -> new EncryptedMessage(
+                    wireJson,
+                    null,
+                    WindLetterArmor.encodeBinary(wireJsonUtf8),
+                    format
+                );
+            };
+        } finally {
+            clear(wireJsonUtf8);
         }
+    }
+
+    private static void requireSupportedOptions(java.util.Map<String, Object> headers) {
         if (!headers.isEmpty()) {
             throw new IllegalArgumentException(
                 "customHeaders are not defined by the Wind Letter v1.0 inner profile"

@@ -239,7 +239,7 @@ class PublicX25519ApiE2ETest {
     }
 
     @Test
-    void nonRawInputsAndCustomHeadersAreRejectedBeforeKeyAccess() {
+    void customHeadersAndMalformedArmorAreRejectedBeforeKeyAccess() {
         try (Fixture keys = new Fixture()) {
             WindLetterSender sender = new DefaultWindLetterSender(keys, keys, keys);
             int senderOpens = keys.senderEncryptionOpens;
@@ -256,14 +256,15 @@ class PublicX25519ApiE2ETest {
 
             WindLetterReceiver receiver = new DefaultWindLetterReceiver(keys, keys, keys);
             int recipientOpens = keys.recipientLeaseOpens;
-            assertThrows(IllegalArgumentException.class, () -> receiver.decrypt(new DecryptRequest(
+            DecryptResult malformed = receiver.decrypt(new DecryptRequest(
                 null,
-                "not-yet-supported",
+                "not-valid-base64url",
                 null,
                 ArmorFormat.BASE64URL,
                 new RecipientIdentityRef("recipient-1", null),
                 VerificationPolicy.AUTO_BY_CTY
-            )));
+            ));
+            assertGenericInvalid(malformed);
             assertEquals(recipientOpens, keys.recipientLeaseOpens);
         }
     }

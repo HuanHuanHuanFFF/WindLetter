@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
 class WindLetterEightProfileApiE2ETest {
@@ -78,11 +79,58 @@ class WindLetterEightProfileApiE2ETest {
                 KeyAlgProfile.X25519,
                 KeyAlgProfile.X25519_ML_KEM_768
             ).flatMap(profile -> Stream.of(false, true)
-                .flatMap(signed -> PAYLOADS.stream().map(payloadCase -> DynamicTest.dynamicTest(
-                    mode + "/" + profile + "/" + (signed ? "signed" : "unsigned")
-                        + "/" + payloadCase.name(),
-                    () -> roundTrip(mode, profile, signed, payloadCase)
-                )))));
+                .flatMap(signed -> Stream.of(ArmorFormat.values())
+                    .flatMap(format -> PAYLOADS.stream().map(payloadCase -> DynamicTest.dynamicTest(
+                        mode + "/" + profile + "/" + (signed ? "signed" : "unsigned")
+                            + "/" + format + "/" + payloadCase.name(),
+                        () -> roundTrip(mode, profile, signed, format, payloadCase)
+                    ))))));
+    }
+
+    @Test
+    void textArmorCanBeAutoDetected() {
+        for (ArmorFormat format : List.of(
+            ArmorFormat.BASE64URL,
+            ArmorFormat.WIND_BASE_1024F_V1
+        )) {
+            try (Fixture keys = new Fixture(KeyAlgProfile.X25519)) {
+                EncryptedMessage encrypted = encryptUnsigned(
+                    WindMode.PUBLIC,
+                    KeyAlgProfile.X25519,
+                    format,
+                    keys
+                );
+                WindLetterReceiver receiver = WindLetterRuntime.receiver(keys, keys, keys);
+                DecryptResult result = receiver.decrypt(new DecryptRequest(
+                    null,
+                    encrypted.armor(),
+                    null,
+                    null,
+                    new RecipientIdentityRef("recipient-2", null),
+                    VerificationPolicy.AUTO_BY_CTY
+                ));
+
+                assertEquals(DecryptStatus.SUCCESS, result.status());
+            }
+        }
+    }
+
+    @Test
+    void malformedArmorIsRejectedBeforeRecipientKeysAreOpened() {
+        try (Fixture keys = new Fixture(KeyAlgProfile.X25519)) {
+            WindLetterReceiver receiver = WindLetterRuntime.receiver(keys, keys, keys);
+            DecryptResult result = receiver.decrypt(new DecryptRequest(
+                null,
+                null,
+                new byte[] {0, 1, 2},
+                ArmorFormat.BINARY,
+                new RecipientIdentityRef("recipient-2", null),
+                VerificationPolicy.AUTO_BY_CTY
+            ));
+
+            assertGenericInvalid(result);
+            assertEquals(0, keys.recipientLeaseOpens);
+        }
     }
 
     @TestFactory
@@ -174,11 +222,20 @@ class WindLetterEightProfileApiE2ETest {
         KeyAlgProfile profile,
         Fixture keys
     ) {
+        return encryptUnsigned(mode, profile, ArmorFormat.NONE, keys);
+    }
+
+    private static EncryptedMessage encryptUnsigned(
+        WindMode mode,
+        KeyAlgProfile profile,
+        ArmorFormat armorFormat,
+        Fixture keys
+    ) {
         WindLetterSender sender = WindLetterRuntime.sender(keys, keys, keys);
         return sender.encrypt(new EncryptRequest(
             mode,
             profile,
-            ArmorFormat.NONE,
+            armorFormat,
             new Payload("application/octet-stream", new byte[] {0, 1, 2}, 3),
             keys.recipientRefs(),
             Map.of(),
@@ -242,6 +299,7 @@ class WindLetterEightProfileApiE2ETest {
         WindMode mode,
         KeyAlgProfile profile,
         boolean signed,
+        ArmorFormat armorFormat,
         PayloadCase payloadCase
     ) {
         try (Fixture keys = new Fixture(profile)) {
@@ -260,7 +318,7 @@ class WindLetterEightProfileApiE2ETest {
                 ? sender.encryptAndSign(new EncryptAndSignRequest(
                     mode,
                     profile,
-                    ArmorFormat.NONE,
+                    armorFormat,
                     payload,
                     keys.recipientRefs(),
                     Map.of(),
@@ -270,7 +328,7 @@ class WindLetterEightProfileApiE2ETest {
                 : sender.encrypt(new EncryptRequest(
                     mode,
                     profile,
-                    ArmorFormat.NONE,
+                    armorFormat,
                     payload,
                     keys.recipientRefs(),
                     Map.of(),
@@ -287,14 +345,7 @@ class WindLetterEightProfileApiE2ETest {
             assertEquals(signed ? "wind+jws" : "wind+inner",
                 parsed.protectedHeader().cty());
 
-            DecryptResult result = receiver.decrypt(new DecryptRequest(
-                encrypted.wireJson(),
-                null,
-                null,
-                ArmorFormat.NONE,
-                new RecipientIdentityRef("recipient-2", null),
-                VerificationPolicy.AUTO_BY_CTY
-            ));
+            DecryptResult result = receiver.decrypt(decryptRequest(encrypted));
 
             assertEquals(DecryptStatus.SUCCESS, result.status());
             assertEquals(payload.contentType(), result.payload().contentType());
@@ -331,6 +382,17 @@ class WindLetterEightProfileApiE2ETest {
                 clear(stillOpen);
             }
         }
+    }
+
+    private static DecryptRequest decryptRequest(EncryptedMessage encrypted) {
+        return new DecryptRequest(
+            encrypted.armorFormat() == ArmorFormat.NONE ? encrypted.wireJson() : null,
+            encrypted.armor(),
+            encrypted.armorBytes(),
+            encrypted.armorFormat(),
+            new RecipientIdentityRef("recipient-2", null),
+            VerificationPolicy.AUTO_BY_CTY
+        );
     }
 
     private static void assertClosed(X25519PrivateKeyHandle handle) {

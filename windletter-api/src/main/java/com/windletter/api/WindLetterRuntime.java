@@ -11,9 +11,8 @@ import com.windletter.api.spi.SenderPublicKeyResolver;
 /**
  * Minimal composition root for the default Wind Letter v1.0 implementation.
  *
- * <p>The returned facades use the production protocol flows and cryptographic providers. The
- * current runtime accepts and returns raw JSON wire data with no armor; armor integration belongs
- * to the next Demo phase.
+ * <p>The returned facades use the production protocol flows and cryptographic providers. They
+ * support raw JSON wire data plus the binary, Base64URL and WindBase1024F v1 transport armors.
  */
 public final class WindLetterRuntime {
 

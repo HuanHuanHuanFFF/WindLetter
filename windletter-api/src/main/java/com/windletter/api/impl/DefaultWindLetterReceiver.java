@@ -1,6 +1,8 @@
 package com.windletter.api.impl;
 
 import com.windletter.api.WindLetterReceiver;
+import com.windletter.armor.ArmorException;
+import com.windletter.armor.WindLetterArmor;
 import com.windletter.api.enums.ArmorFormat;
 import com.windletter.api.enums.DecryptStatus;
 import com.windletter.api.enums.VerificationPolicy;
@@ -37,6 +39,7 @@ import com.windletter.protocol.signature.Ed25519VerificationKeyResolver;
 import com.windletter.protocol.signature.TrustedEd25519Key;
 import com.windletter.protocol.wire.ProtectedHeader;
 import com.windletter.protocol.wire.WindLetter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -114,11 +117,16 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
         DecryptRequest request,
         VerificationPolicy verificationPolicy
     ) {
-        requireRawWire(request);
+        final DecryptRequest rawRequest;
+        try {
+            rawRequest = normalizedRawRequest(request);
+        } catch (ArmorException failure) {
+            return invalidMessage();
+        }
 
         final WindLetter parsed;
         try {
-            parsed = parser.parse(request.wireJson());
+            parsed = parser.parse(rawRequest.wireJson());
         } catch (ProtocolException failure) {
             return mapProtocolFailure(failure);
         }
@@ -140,21 +148,21 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
         }
         if (obfuscationMode) {
             return x25519Profile
-                ? obfuscationX25519.decrypt(request, signed)
-                : obfuscationHybrid.decrypt(request, signed);
+                ? obfuscationX25519.decrypt(rawRequest, signed)
+                : obfuscationHybrid.decrypt(rawRequest, signed);
         }
         if (hybridProfile) {
-            return publicHybrid.decrypt(request, signed);
+            return publicHybrid.decrypt(rawRequest, signed);
         }
 
-        List<DecryptionKeyLease> leases = openRecipientLeases(request);
+        List<DecryptionKeyLease> leases = openRecipientLeases(rawRequest);
         Throwable pending = null;
         try {
             List<X25519PrivateKeyHandle> candidates = validatedX25519Candidates(leases);
             if (signed) {
-                return receiveSigned(request.wireJson(), candidates);
+                return receiveSigned(rawRequest.wireJson(), candidates);
             }
-            return receiveUnsigned(request.wireJson(), candidates);
+            return receiveUnsigned(rawRequest.wireJson(), candidates);
         } catch (RuntimeException | Error failure) {
             pending = failure;
             throw failure;
@@ -345,15 +353,38 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
         );
     }
 
-    private static void requireRawWire(DecryptRequest request) {
-        if (request.armorFormat() != ArmorFormat.NONE
-            || request.armor() != null
-            || request.armorBytes() != null
-            || request.wireJson() == null
-            || request.wireJson().isBlank()) {
-            throw new IllegalArgumentException(
-                "Phase 6 receiver accepts only one raw wireJson with ArmorFormat.NONE"
+    private static DecryptRequest normalizedRawRequest(DecryptRequest request) {
+        if (request.armorFormat() == ArmorFormat.NONE) {
+            return request;
+        }
+
+        byte[] wireJsonUtf8;
+        if (request.armorFormat() == null) {
+            wireJsonUtf8 = WindLetterArmor.decodeTextAuto(request.armor());
+        } else if (request.armorFormat() == ArmorFormat.BINARY) {
+            byte[] binaryArmor = request.armorBytes();
+            try {
+                wireJsonUtf8 = WindLetterArmor.decodeBinary(binaryArmor);
+            } finally {
+                clear(binaryArmor);
+            }
+        } else if (request.armorFormat() == ArmorFormat.BASE64URL) {
+            wireJsonUtf8 = WindLetterArmor.decodeBase64Url(request.armor());
+        } else {
+            wireJsonUtf8 = WindLetterArmor.decodeWindBase1024F(request.armor());
+        }
+
+        try {
+            return new DecryptRequest(
+                new String(wireJsonUtf8, StandardCharsets.UTF_8),
+                null,
+                null,
+                ArmorFormat.NONE,
+                request.myIdentity(),
+                request.verificationPolicy()
             );
+        } finally {
+            clear(wireJsonUtf8);
         }
     }
 
