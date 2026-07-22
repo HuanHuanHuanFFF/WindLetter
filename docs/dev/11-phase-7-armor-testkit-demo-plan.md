@@ -1,6 +1,6 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
-> 状态：进行中；Task 1—5 已完成，下一步 Task 6 可独立运行 Demo
+> 状态：进行中；Task 1—6 已完成，下一步 Task 7 阶段封板
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`
 
@@ -133,14 +133,16 @@ Armor 内部异常可保留诊断原因；公开 API 不返回具体失败阶段
 - 增加 deterministic armor vectors 与关键协议回归入口。
 - 完成证据：`windletter-testkit` 已提供基于真实 BC 私钥句柄与 API lease 的单场景内存密钥仓库；107 项聚焦测试覆盖 8 profiles × 4 formats × text/binary payload、多收件人、obfuscation 8 槽填充、所有 profile/armor 的 `NOT_FOR_ME`、截断、等长篡改、wrong format、20 MiB 超限，以及三种 armor 固定向量。指定 JDK 17 全仓 93 suites / 918 tests，0 failure、0 error、0 skipped。
 
-### Task 6：可独立运行的 WindLetterDemo（下一步）
+### Task 6：可独立运行的 WindLetterDemo（已完成）
 
 - 提供不依赖 JUnit 的 `main` 入口和明确 Maven 运行命令。
 - 实际生成密钥、payload、多收件人、可选签名、outer JSON 与 armor，随后由 Receiver 恢复 payload。
 - 至少展示总体计划要求的四个代表 profile，并输出 `SIGNED_VALID` / `UNSIGNED`、`NOT_FOR_ME`、`INVALID_MESSAGE`。
 - 不输出私钥、shared secret、CEK、KEK 或敏感随机材料。
+- 运行入口：`mvn -q -pl windletter-testkit -am -Pdemo verify`；详细说明见 `docs/dev/12-windletter-v1-demo-run.md`。
+- 完成证据：非 JUnit `main` 已实际运行四个代表场景，覆盖两种 mode、两种 key profile、signed/unsigned、Base64URL/WindBase/binary、多收件人与 obfuscation 8 槽填充；同时输出并自检 `NOT_FOR_ME` 和 key lease 前 `INVALID_MESSAGE`。同次 verify 为 94 suites / 919 tests，0 failure、0 error、0 skipped。
 
-### Task 7：阶段封板
+### Task 7：阶段封板（下一步）
 
 - 使用指定 JDK 17 运行 `mvn -q clean verify`。
 - 汇总全部 Surefire 报告，要求 0 failure、0 error、0 skipped。
