@@ -1039,3 +1039,16 @@ Wind Letter v1.0 对 Obfuscation Hybrid 作如下修订：
 12. Receiver 必须在成功和失败路径清除 `SS_ECC`、`SS_PQ`、`Z`、候选 `rid`、候选/选中 KEK、CEK、inner 和 GCM AAD 等 owned 临时材料。长期 X25519/ML-KEM private-key handles 由调用方借用，protocol flow 不得关闭；Sender 的每消息临时 X25519 private-key handle 必须关闭。
 
 本修订不改变 Obfuscation Hybrid 的 wire 字段、长度或算法白名单。对外投递语义仍只有 `NotForMe` 与 `InvalidMessage`；protocol 内部细分错误码不得成为区分 ML-KEM 解封装、A256KW unwrap 或其它认证失败的远程 oracle。
+
+### 2026-07-23：冻结 Armor 公共帧、文本封装与版本引导
+
+开发桌面端传输格式前确认：原开发阶段使用的无头尾 Base64URL 和“按字符集猜测格式”不适合作为最终 v1 Armor；同时，单字节版本号会限制后续字表与封装版本演进。Wind Letter v1.0 对 Armor 作如下修订：
+
+1. Binary 与两种文本 Armor 共享逻辑帧 `WLA | canonical unsigned LEB128(version) | uint32 length | outer JSON UTF-8 | CRC-32`。版本号必须为正整数并使用最短 unsigned LEB128；v1 仍编码为 `01`，因此 v1 binary 向量保持不变。
+2. 标准文本格式使用 RFC 4648 带 `=` padding 的 Base64，正文每行64个 ASCII 字符，外层固定为 `-----BEGIN WIND LETTER-----` 与 `-----END WIND LETTER-----`。
+3. 風笺文本固定使用 `-----風笺 起-----` 与 `-----風笺 凪-----`。正文先写永久冻结的 `WLA` 引导、无前导零的64进制版本号和终止符 `凪`，再按该版本选择 WindBase 正文字表。v1 完整引导为 `渢𩗍𩘥𬱶𬱶凪`。
+4. 文本自动路由只允许精确识别上述两个起始行，不再按 ASCII/非 ASCII 或字表成员关系猜测；显式格式不得回退到另一解码器。未知、非规范版本和错误头部必须在访问收件人私钥前拒绝。
+5. 生成器使用 LF，解析器兼容 LF 与 CRLF；所有 風笺符号计数、换行、截断均按 Unicode 码点执行，不进行 Unicode normalization。
+6. 本修订只改变外部 Armor/transport 表示。outer/inner JSON 字段、AAD、kid、签名等协议内部原有 Base64URL 规则保持不变。
+
+完整字符表、哈希与文本格式以 [`WindLetter Armor规则.md`](./WindLetter%20Armor规则.md) 为准；若旧开发计划中的 Armor 描述与本修订冲突，以本修订和该规则文档为准。

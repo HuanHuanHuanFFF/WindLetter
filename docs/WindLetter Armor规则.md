@@ -40,6 +40,7 @@ WLA | canonical unsigned LEB128(version) | uint32 length | outer wire JSON UTF-8
 - v1 的版本数字为 `𬱶`，完整引导为 `渢𩗍𩘥𬱶𬱶凪`。
 - 解析器读取到 `凪` 后，根据版本选择正文1024字表；未知版本必须在正文解码和访问私钥前拒绝。
 - 所有字符计数、截断与换行都按 Unicode 码点处理，不使用 Java `String.length()` 作为符号数。
+- 風笺正文按64个 Unicode 码点换行；生成器使用 LF，解析器同时接受 LF 与 CRLF。
 - 不对输入执行 Unicode normalization。
 
 ## 永久冻结的64字符版本数字表

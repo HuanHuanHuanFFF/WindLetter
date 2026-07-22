@@ -90,7 +90,7 @@ class WindLetterEightProfileApiE2ETest {
     @Test
     void textArmorCanBeAutoDetected() {
         for (ArmorFormat format : List.of(
-            ArmorFormat.BASE64URL,
+            ArmorFormat.BASE64_PEM,
             ArmorFormat.WIND_BASE_1024F_V1
         )) {
             try (Fixture keys = new Fixture(KeyAlgProfile.X25519)) {

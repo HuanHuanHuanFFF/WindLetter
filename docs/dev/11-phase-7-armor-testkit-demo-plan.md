@@ -1,5 +1,7 @@
 # 阶段 7：Armor、Testkit 与可运行 Demo 计划
 
+> 2026-07-23 修订：本文件第 3 节记录阶段 7 当时的历史实现。最终 Armor 规则已改为标准 Base64 PEM、風笺固定头尾与可扩展版本引导，以 `docs/WindLetter Armor规则.md` 和正式协议开发修订为准。
+
 > 状态：已完成；Task 1—7 全部通过，WindLetter v1.0 Demo 已封板
 > 日期：2026-07-22
 > 分支：`spike/demo-v0`

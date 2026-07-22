@@ -16,7 +16,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Set;
 
-/** Package-private 10-bit codec for the frozen WIND_BASE_1024F_V1 alphabet. */
+/** Package-private 10-bit codec for the frozen WIND_BASE_1024F_V1 body alphabet. */
 final class WindBase1024FCodec {
 
     private static final String ALPHABET_RESOURCE =
@@ -25,22 +25,20 @@ final class WindBase1024FCodec {
         "255519fb0d061d88fbd9a8d216ceb6494e09e9fb72e80d7c1815ca4aef794eba";
     private static final int ALPHABET_SIZE = 1024;
     private static final int BITS_PER_SYMBOL = 10;
-    private static final int FRAME_OVERHEAD = 12;
-    private static final int MAX_FRAME_BYTES = ProtocolLimits.MAX_WIRE_UTF8_BYTES + FRAME_OVERHEAD;
-    private static final int MAX_SYMBOLS = (MAX_FRAME_BYTES * 8 + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL;
-    private static final byte[] MAGIC = {'W', 'L', 'A'};
-    private static final int VERSION = 1;
+    private static final int BODY_OVERHEAD = 8;
+    private static final int MAX_BODY_BYTES = ProtocolLimits.MAX_WIRE_UTF8_BYTES + BODY_OVERHEAD;
+    private static final int MAX_SYMBOLS = (MAX_BODY_BYTES * 8 + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL;
     private static final Alphabet ALPHABET = loadAlphabet();
 
     private WindBase1024FCodec() {
     }
 
-    static String encodeFrame(byte[] frame) {
-        int symbolCount = (frame.length * 8 + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL;
+    static String encodeBody(byte[] body) {
+        int symbolCount = (body.length * 8 + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL;
         StringBuilder encoded = new StringBuilder(symbolCount * 2);
         int buffer = 0;
         int bitCount = 0;
-        for (byte current : frame) {
+        for (byte current : body) {
             buffer = buffer << 8 | current & 0xff;
             bitCount += 8;
             while (bitCount >= BITS_PER_SYMBOL) {
@@ -57,7 +55,7 @@ final class WindBase1024FCodec {
         return encoded.toString();
     }
 
-    static byte[] decodeFrame(String armor) {
+    static byte[] decodeBody(String armor) {
         int symbolCount = validateAndCountSymbols(armor);
         int packedByteCount = symbolCount * BITS_PER_SYMBOL / 8;
         byte[] packed = new byte[packedByteCount];
@@ -78,36 +76,24 @@ final class WindBase1024FCodec {
             }
         }
 
-        if (packed.length < FRAME_OVERHEAD) {
-            throw malformed(ArmorException.Reason.INVALID_MAGIC, "WindBase1024F armor is shorter than the v1 frame");
-        }
-        for (int i = 0; i < MAGIC.length; i++) {
-            if (packed[i] != MAGIC[i]) {
-                throw malformed(ArmorException.Reason.INVALID_MAGIC, "WindBase1024F armor magic is invalid");
-            }
-        }
-        int version = packed[3] & 0xff;
-        if (version != VERSION) {
-            throw malformed(
-                ArmorException.Reason.UNSUPPORTED_VERSION,
-                "unsupported armor frame version: " + version
-            );
+        if (packed.length < BODY_OVERHEAD) {
+            throw malformed(ArmorException.Reason.INVALID_LENGTH, "WindBase1024F body is shorter than the v1 body");
         }
 
-        long payloadLength = readUnsignedInt(packed, 4);
+        long payloadLength = readUnsignedInt(packed, 0);
         if (payloadLength == 0 || payloadLength > ProtocolLimits.MAX_WIRE_UTF8_BYTES) {
             throw malformed(ArmorException.Reason.INVALID_LENGTH, "armor payload length is outside the allowed range");
         }
-        long expectedFrameBytes = FRAME_OVERHEAD + payloadLength;
-        long expectedSymbols = (expectedFrameBytes * 8 + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL;
-        if (expectedSymbols != symbolCount || expectedFrameBytes > packed.length) {
+        long expectedBodyBytes = BODY_OVERHEAD + payloadLength;
+        long expectedSymbols = (expectedBodyBytes * 8 + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL;
+        if (expectedSymbols != symbolCount || expectedBodyBytes > packed.length) {
             throw malformed(
                 ArmorException.Reason.INVALID_LENGTH,
-                "WindBase1024F symbol count does not match the frame length"
+                "WindBase1024F symbol count does not match the body length"
             );
         }
 
-        for (int i = (int) expectedFrameBytes; i < packed.length; i++) {
+        for (int i = (int) expectedBodyBytes; i < packed.length; i++) {
             if (packed[i] != 0) {
                 throw malformed(ArmorException.Reason.INVALID_TEXT, "WindBase1024F trailing padding bits must be zero");
             }
@@ -115,15 +101,15 @@ final class WindBase1024FCodec {
         if (buffer != 0) {
             throw malformed(ArmorException.Reason.INVALID_TEXT, "WindBase1024F trailing padding bits must be zero");
         }
-        return Arrays.copyOf(packed, (int) expectedFrameBytes);
+        return Arrays.copyOf(packed, (int) expectedBodyBytes);
     }
 
     private static int validateAndCountSymbols(String armor) {
         if (armor == null || armor.isEmpty()) {
-            throw malformed(ArmorException.Reason.INVALID_INPUT, "WindBase1024F armor must be non-empty");
+            throw malformed(ArmorException.Reason.INVALID_INPUT, "WindBase1024F body must be non-empty");
         }
         if (armor.length() > MAX_SYMBOLS * 2) {
-            throw malformed(ArmorException.Reason.INVALID_INPUT, "WindBase1024F armor exceeds the maximum encoded size");
+            throw malformed(ArmorException.Reason.INVALID_INPUT, "WindBase1024F body exceeds the maximum encoded size");
         }
 
         int symbolCount = 0;
@@ -144,7 +130,7 @@ final class WindBase1024FCodec {
             offset += Character.charCount(codePoint);
             symbolCount++;
             if (symbolCount > MAX_SYMBOLS) {
-                throw malformed(ArmorException.Reason.INVALID_INPUT, "WindBase1024F armor exceeds the maximum encoded size");
+                throw malformed(ArmorException.Reason.INVALID_INPUT, "WindBase1024F body exceeds the maximum encoded size");
             }
         }
         return symbolCount;

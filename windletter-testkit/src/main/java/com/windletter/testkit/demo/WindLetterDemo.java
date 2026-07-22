@@ -36,7 +36,7 @@ public final class WindLetterDemo {
             WindMode.PUBLIC,
             KeyAlgProfile.X25519,
             false,
-            ArmorFormat.BASE64URL
+            ArmorFormat.BASE64_PEM
         ),
         new DemoCase(
             WindMode.PUBLIC,
@@ -154,7 +154,7 @@ public final class WindLetterDemo {
             EncryptedMessage encrypted = encryptUnsigned(
                 WindMode.PUBLIC,
                 KeyAlgProfile.X25519,
-                ArmorFormat.BASE64URL,
+                ArmorFormat.BASE64_PEM,
                 senderKeys
             );
             WindLetterReceiver receiver = WindLetterRuntime.receiver(
@@ -253,7 +253,7 @@ public final class WindLetterDemo {
         return switch (encrypted.armorFormat()) {
             case NONE -> "rawWire=true";
             case BINARY -> "armorBytes=" + encrypted.armorBytes().length;
-            case BASE64URL, WIND_BASE_1024F_V1 -> {
+            case BASE64_PEM, WIND_BASE_1024F_V1 -> {
                 String armor = encrypted.armor();
                 int codePoints = armor.codePointCount(0, armor.length());
                 yield "armorCodePoints=" + codePoints + " armorUtf16Units=" + armor.length();

@@ -319,9 +319,9 @@ public final class DefaultWindLetterSender implements WindLetterSender {
         try {
             return switch (format) {
                 case NONE -> rawMessage;
-                case BASE64URL -> new EncryptedMessage(
+                case BASE64_PEM -> new EncryptedMessage(
                     wireJson,
-                    WindLetterArmor.encodeBase64Url(wireJsonUtf8),
+                    WindLetterArmor.encodeBase64Pem(wireJsonUtf8),
                     null,
                     format
                 );

@@ -18,7 +18,7 @@ class EncryptedMessageTest {
     void shouldRejectNonNoneFormatWhenArmorMissing() {
         assertThrows(
             IllegalArgumentException.class,
-            () -> new EncryptedMessage("{\"k\":\"v\"}", null, null, ArmorFormat.BASE64URL)
+            () -> new EncryptedMessage("{\"k\":\"v\"}", null, null, ArmorFormat.BASE64_PEM)
         );
     }
 

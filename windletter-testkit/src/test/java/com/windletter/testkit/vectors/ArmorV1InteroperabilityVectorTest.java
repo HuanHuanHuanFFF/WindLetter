@@ -12,25 +12,34 @@ class ArmorV1InteroperabilityVectorTest {
 
     private static final byte[] EMPTY_OBJECT = "{}".getBytes(StandardCharsets.UTF_8);
     private static final String BINARY_HEX = "574c4101000000027b7d225fb541";
-    private static final String BASE64URL = "V0xBAQAAAAJ7fSJftUE";
-    private static final int[] WIND_CODE_POINTS = {
-        0x295ab, 0x35a0, 0x2c1da, 0x449b, 0x2962b, 0x2962b,
-        0x29603, 0x29648, 0x98b8, 0x2ea2b, 0x3488, 0x449b
+    private static final String BASE64_PEM = "-----BEGIN WIND LETTER-----\n"
+        + "V0xBAQAAAAJ7fSJftUE=\n"
+        + "-----END WIND LETTER-----";
+    private static final int[] WIND_CONTENT_CODE_POINTS = {
+        0x6e22, 0x295cd, 0x29625, 0x2cc76, 0x2cc76, 0x51ea,
+        0x2962b, 0x2962b, 0x2962b, 0x3692, 0x34c3, 0x364a, 0x3438, 0x3654
     };
 
     @Test
     void commonFrameAndTextCodecsMatchFrozenV1Vector() {
         byte[] expectedFrame = HexFormat.of().parseHex(BINARY_HEX);
-        String expectedWind = new String(WIND_CODE_POINTS, 0, WIND_CODE_POINTS.length);
+        String expectedWindContent = new String(
+            WIND_CONTENT_CODE_POINTS,
+            0,
+            WIND_CONTENT_CODE_POINTS.length
+        );
+        String expectedWind = "-----風笺 起-----\n"
+            + expectedWindContent + "\n"
+            + "-----風笺 凪-----";
 
         assertArrayEquals(expectedFrame, WindLetterArmor.encodeBinary(EMPTY_OBJECT));
-        assertEquals(BASE64URL, WindLetterArmor.encodeBase64Url(EMPTY_OBJECT));
+        assertEquals(BASE64_PEM, WindLetterArmor.encodeBase64Pem(EMPTY_OBJECT));
         assertEquals(expectedWind, WindLetterArmor.encodeWindBase1024F(EMPTY_OBJECT));
-        assertEquals(12, expectedWind.codePointCount(0, expectedWind.length()));
-        assertEquals(19, expectedWind.length());
+        assertEquals(14, expectedWindContent.codePointCount(0, expectedWindContent.length()));
+        assertEquals(21, expectedWindContent.length());
 
         assertArrayEquals(EMPTY_OBJECT, WindLetterArmor.decodeBinary(expectedFrame));
-        assertArrayEquals(EMPTY_OBJECT, WindLetterArmor.decodeBase64Url(BASE64URL));
+        assertArrayEquals(EMPTY_OBJECT, WindLetterArmor.decodeBase64Pem(BASE64_PEM));
         assertArrayEquals(EMPTY_OBJECT, WindLetterArmor.decodeWindBase1024F(expectedWind));
     }
 }

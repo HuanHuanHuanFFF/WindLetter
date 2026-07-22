@@ -1,6 +1,8 @@
 # WIND_BASE_1024F_V1 字母表规范
 
-> 状态：v1 字母表已确认并冻结；本文件只冻结字母表顺序，不代表 framing 与 bit packing 已冻结。
+> 2026-07-23 修订：字表顺序仍有效；framing、bit packing、版本引导和文本头尾现已冻结，最终规则见 `docs/WindLetter Armor规则.md`。
+
+> 状态：v1 字母表已确认并冻结；本文件只负责字表顺序，最终 framing、bit packing 与版本引导见 `docs/WindLetter Armor规则.md`。
 > 日期：2026-07-22
 
 ## 1. 目标与术语

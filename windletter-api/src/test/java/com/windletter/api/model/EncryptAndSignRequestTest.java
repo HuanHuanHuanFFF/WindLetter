@@ -18,7 +18,7 @@ class EncryptAndSignRequestTest {
             () -> new EncryptAndSignRequest(
                 WindMode.PUBLIC,
                 KeyAlgProfile.X25519,
-                ArmorFormat.BASE64URL,
+                ArmorFormat.BASE64_PEM,
                 new Payload("text/plain", new byte[] {1}, 1),
                 List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
                 Map.of(),
@@ -35,7 +35,7 @@ class EncryptAndSignRequestTest {
             () -> new EncryptAndSignRequest(
                 WindMode.PUBLIC,
                 KeyAlgProfile.X25519,
-                ArmorFormat.BASE64URL,
+                ArmorFormat.BASE64_PEM,
                 new Payload("text/plain", new byte[] {1}, 1),
                 List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
                 Map.of(),
@@ -50,7 +50,7 @@ class EncryptAndSignRequestTest {
         EncryptAndSignRequest request = new EncryptAndSignRequest(
             WindMode.PUBLIC,
             KeyAlgProfile.X25519,
-            ArmorFormat.BASE64URL,
+            ArmorFormat.BASE64_PEM,
             new Payload("text/plain", new byte[] {1}, 1),
             List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
             Map.of(),

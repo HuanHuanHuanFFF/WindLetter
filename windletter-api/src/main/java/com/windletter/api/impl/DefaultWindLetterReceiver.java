@@ -368,8 +368,8 @@ public final class DefaultWindLetterReceiver implements WindLetterReceiver {
             } finally {
                 clear(binaryArmor);
             }
-        } else if (request.armorFormat() == ArmorFormat.BASE64URL) {
-            wireJsonUtf8 = WindLetterArmor.decodeBase64Url(request.armor());
+        } else if (request.armorFormat() == ArmorFormat.BASE64_PEM) {
+            wireJsonUtf8 = WindLetterArmor.decodeBase64Pem(request.armor());
         } else {
             wireJsonUtf8 = WindLetterArmor.decodeWindBase1024F(request.armor());
         }

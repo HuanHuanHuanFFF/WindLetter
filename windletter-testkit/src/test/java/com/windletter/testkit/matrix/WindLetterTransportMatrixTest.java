@@ -85,7 +85,7 @@ class WindLetterTransportMatrixTest {
         return Stream.of(WindMode.values()).flatMap(mode ->
             Stream.of(KeyAlgProfile.values()).flatMap(profile ->
                 Stream.of(
-                    ArmorFormat.BASE64URL,
+                    ArmorFormat.BASE64_PEM,
                     ArmorFormat.WIND_BASE_1024F_V1,
                     ArmorFormat.BINARY
                 ).map(format -> DynamicTest.dynamicTest(
@@ -101,7 +101,7 @@ class WindLetterTransportMatrixTest {
         return Stream.of(WindMode.values()).flatMap(mode ->
             Stream.of(KeyAlgProfile.values()).flatMap(profile ->
                 Stream.of(
-                    ArmorFormat.BASE64URL,
+                    ArmorFormat.BASE64_PEM,
                     ArmorFormat.WIND_BASE_1024F_V1,
                     ArmorFormat.BINARY
                 ).map(format -> DynamicTest.dynamicTest(
@@ -131,12 +131,34 @@ class WindLetterTransportMatrixTest {
     }
 
     @Test
+    void unknownHeaderAndUnsupportedWindVersionFailBeforeKeyAccess() {
+        try (InMemoryDemoKeyRepository keys = new InMemoryDemoKeyRepository(KeyAlgProfile.X25519)) {
+            WindLetterReceiver receiver = WindLetterRuntime.receiver(keys, keys, keys);
+            for (String armor : List.of(
+                "not a Wind Letter armor",
+                "-----風笺 起-----\n渢𩗍𩘥𬱶䫻凪A\n-----風笺 凪-----"
+            )) {
+                DecryptResult result = receiver.decrypt(new DecryptRequest(
+                    null,
+                    armor,
+                    null,
+                    null,
+                    keys.recipientIdentity(),
+                    VerificationPolicy.AUTO_BY_CTY
+                ));
+                assertGenericInvalid(result);
+            }
+            assertEquals(0, keys.recipientLeaseOpens());
+        }
+    }
+
+    @Test
     void explicitTextFormatNeverFallsBackToAnotherCodec() {
         try (InMemoryDemoKeyRepository keys = new InMemoryDemoKeyRepository(KeyAlgProfile.X25519)) {
             EncryptedMessage encrypted = encryptUnsigned(
                 WindMode.PUBLIC,
                 KeyAlgProfile.X25519,
-                ArmorFormat.BASE64URL,
+                ArmorFormat.BASE64_PEM,
                 keys
             );
             WindLetterReceiver receiver = WindLetterRuntime.receiver(keys, keys, keys);
@@ -249,7 +271,7 @@ class WindLetterTransportMatrixTest {
         try (InMemoryDemoKeyRepository keys = new InMemoryDemoKeyRepository(profile)) {
             EncryptedMessage encrypted = encryptUnsigned(mode, profile, armorFormat, keys);
             DecryptRequest truncated = switch (armorFormat) {
-                case BASE64URL -> new DecryptRequest(
+                case BASE64_PEM -> new DecryptRequest(
                     null,
                     encrypted.armor().substring(0, encrypted.armor().length() - 1),
                     null,
@@ -259,7 +281,7 @@ class WindLetterTransportMatrixTest {
                 );
                 case WIND_BASE_1024F_V1 -> new DecryptRequest(
                     null,
-                    dropLastCodePoint(encrypted.armor()),
+                    dropLastWindBodyCodePoint(encrypted.armor()),
                     null,
                     armorFormat,
                     keys.recipientIdentity(),
@@ -291,9 +313,9 @@ class WindLetterTransportMatrixTest {
         try (InMemoryDemoKeyRepository keys = new InMemoryDemoKeyRepository(profile)) {
             EncryptedMessage encrypted = encryptUnsigned(mode, profile, armorFormat, keys);
             DecryptRequest tampered = switch (armorFormat) {
-                case BASE64URL -> new DecryptRequest(
+                case BASE64_PEM -> new DecryptRequest(
                     null,
-                    tamperBase64UrlFrame(encrypted.armor()),
+                    tamperBase64PemFrame(encrypted.armor()),
                     null,
                     armorFormat,
                     keys.recipientIdentity(),
@@ -367,7 +389,7 @@ class WindLetterTransportMatrixTest {
                 assertNull(encrypted.armor());
                 assertNull(encrypted.armorBytes());
             }
-            case BASE64URL, WIND_BASE_1024F_V1 -> {
+            case BASE64_PEM, WIND_BASE_1024F_V1 -> {
                 assertNotNull(encrypted.armor());
                 assertTrue(encrypted.armor().codePointCount(0, encrypted.armor().length()) > 0);
                 assertNull(encrypted.armorBytes());
@@ -379,9 +401,10 @@ class WindLetterTransportMatrixTest {
         }
     }
 
-    private static String dropLastCodePoint(String value) {
-        int codePointCount = value.codePointCount(0, value.length());
-        return value.substring(0, value.offsetByCodePoints(0, codePointCount - 1));
+    private static String dropLastWindBodyCodePoint(String armor) {
+        int footerStart = armor.lastIndexOf("\n-----風笺 凪-----");
+        int lastBodyStart = armor.offsetByCodePoints(footerStart, -1);
+        return armor.substring(0, lastBodyStart) + armor.substring(footerStart);
     }
 
     private static byte[] tamperBinaryFrame(byte[] frame) {
@@ -390,19 +413,27 @@ class WindLetterTransportMatrixTest {
         return tampered;
     }
 
-    private static String tamperBase64UrlFrame(String armor) {
-        byte[] frame = java.util.Base64.getUrlDecoder().decode(armor);
+    private static String tamperBase64PemFrame(String armor) {
+        int headerEnd = armor.indexOf('\n');
+        int footerStart = armor.lastIndexOf("\n-----END WIND LETTER-----");
+        String body = armor.substring(headerEnd + 1, footerStart).replace("\n", "");
+        byte[] frame = java.util.Base64.getDecoder().decode(body);
         frame[8] ^= 1;
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(frame);
+        String encoded = java.util.Base64.getEncoder().encodeToString(frame);
+        StringBuilder pem = new StringBuilder("-----BEGIN WIND LETTER-----\n");
+        for (int offset = 0; offset < encoded.length(); offset += 64) {
+            pem.append(encoded, offset, Math.min(offset + 64, encoded.length())).append('\n');
+        }
+        return pem.append("-----END WIND LETTER-----").toString();
     }
 
     private static String replaceFirstWindCodePoint(String armor) {
-        int first = armor.codePointAt(0);
-        int replacement = first == 0x2962b ? 0x295ab : 0x2962b;
-        return new StringBuilder(armor.length())
-            .appendCodePoint(replacement)
-            .append(armor.substring(Character.charCount(first)))
-            .toString();
+        int bodyStart = armor.indexOf('凪', armor.indexOf('\n') + 1) + 1;
+        int first = armor.codePointAt(bodyStart);
+        int replacement = first == 0x295ab ? 0x2cc76 : 0x295ab;
+        return armor.substring(0, bodyStart)
+            + new String(Character.toChars(replacement))
+            + armor.substring(bodyStart + Character.charCount(first));
     }
 
     private static void assertGenericInvalid(DecryptResult result) {

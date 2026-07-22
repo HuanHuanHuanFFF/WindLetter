@@ -258,9 +258,9 @@ class PublicX25519ApiE2ETest {
             int recipientOpens = keys.recipientLeaseOpens;
             DecryptResult malformed = receiver.decrypt(new DecryptRequest(
                 null,
-                "not-valid-base64url",
+                "not-valid-base64-pem",
                 null,
-                ArmorFormat.BASE64URL,
+                ArmorFormat.BASE64_PEM,
                 new RecipientIdentityRef("recipient-1", null),
                 VerificationPolicy.AUTO_BY_CTY
             ));

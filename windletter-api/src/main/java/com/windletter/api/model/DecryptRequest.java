@@ -72,7 +72,7 @@ public record DecryptRequest(
                         );
                     }
                 }
-                case BASE64URL, WIND_BASE_1024F_V1 -> {
+                case BASE64_PEM, WIND_BASE_1024F_V1 -> {
                     if (!hasTextArmor) {
                         throw new IllegalArgumentException(
                             "text armor is required for a text-based armorFormat"
