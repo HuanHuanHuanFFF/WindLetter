@@ -146,7 +146,7 @@ Outer 与 inner 都必须：
 | 4 | obfuscation × X25519 × signed/unsigned | protocol | 已完成并封板（606 tests；0 failure/error/skip） |
 | 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 已完成并封板（694 tests；0 failure/error/skip） |
 | 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 已完成（2026-07-22） |
-| 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 未开始 |
+| 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 进行中（contract 已冻结） |
 
 ## 6. 阶段 1：Public X25519 Unsigned 真实纵向主链
 
@@ -549,20 +549,12 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 6 已完成并封板。当前全部 8 个协议 profile 不仅有 protocol 层真实 Sender/Receiver，也已经由 `windletter-api` 的公开 Runtime、DTO 与 SPI 以 raw JSON 端到端接通；2026-07-22 使用指定 JDK 17 fresh 验证全仓 87 suites / 746 tests，0 failure、0 error、0 skipped，三类最终审查均为 P0=0、P1=0。
+阶段 6 已完成并封板。阶段 7 已获用户允许并进入开发，详细审计、armor v1 contract、任务顺序和阶段门见 `docs/dev/11-phase-7-armor-testkit-demo-plan.md`。
 
-分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音仍保持未纳入。Phase 6 的 API 主链断点已经消除，下一条真实 Demo 主链断点是阶段 7：armor 尚未实现/接入 API，testkit 尚未形成最终回归矩阵，且没有可独立运行的 `WindLetterDemo` 入口。
+2026-07-22 重新审计确认：`windletter-armor` 与 `windletter-testkit` 都尚无 Java 源码；正式 v1.0 协议只定义 outer JSON wire，armor 是不得改变协议语义的项目传输扩展；API 虽预留四种 `ArmorFormat`，Runtime 仍明确只支持 raw JSON。指定 JDK 17 下 `mvn -q test` 基线成功。
 
-阶段 7 开始时必须先核对并批准可实现的 armor contract：
+阶段 7 已冻结共同 binary frame、canonical Base64URL、WIND_BASE_1024F_V1 10-bit packing、text auto-detect 和 strict error priority。下一开发闭环是 Task 2：在 `windletter-armor` 实现 binary frame 与 Base64URL codec，并建立真实 round-trip/负例测试；完成后立即提交并 push，再继续 WindBase1024F。
 
-- Base64URL text armor 与 binary armor 只能按正式、已批准的格式实现，并验证 exact outer JSON bytes round-trip。
-- `WIND_BASE_1024F_V1` 的 1024 字表已由用户确认并冻结；bit packing/framing contract 仍未形成。该未决项只阻塞此格式的实现，不阻塞阶段 7 对 Base64URL/binary、testkit 和 Demo 的审计与开发。
-- `DecryptRequest` 的 raw/text/binary exact-one、auto-detect 与错误映射需在同一阶段统一收口，不能用猜测格式或 mock 绕过。
+阶段内 P1 是 `DecryptRequest` 输入歧义、解码资源上限、补充平面码点处理和公开错误收敛；它们必须在对应任务中解决。阶段 1—6 的既有 P2 与阶段 7 的 streaming、字体平台、测试去重、跨语言互操作等 P2 均记录后继续推进，不先于 Demo 主链。
 
-当前已知非阻塞 P2：
-
-- 阶段 1—5 的累计 P2 继续由各阶段计划维护，均未升级为协议、密码学或认证 P0/P1。
-- 阶段 6 的 identity TOCTOU、kid 校验下沉、Receiver 重复、API 负例重复度、Runtime 扩展性、运行时治理及维护项，已在 `docs/dev/10-phase-6-api-orchestration-plan.md` §6 逐项写明影响与后续建议。
-- 这些 P2 默认不先于 armor/testkit/Demo 主链处理；若阶段 7 审计发现其中任何一项升级为 P0/P1，再调整顺序。
-
-下一阶段建议进入阶段 7，但按大阶段确认规则在此停止开发，等待用户明确确认。确认后先审计 `windletter-armor`、`windletter-testkit`、正式 armor 段落与已有构建状态，再编写/更新 `docs/dev/11-phase-7-armor-testkit-demo-plan.md`，分闭环实现并提交；不提前声明完整 Demo。
+分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音保持未纳入。阶段 7 全部任务、fresh `mvn -q clean verify` 和实际 Demo 入口完成前，不声明完整 Demo。
