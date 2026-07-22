@@ -1,6 +1,6 @@
 # WindLetter v1.0 Demo-First 整体实现计划
 
-> 状态：阶段 5 `Obfuscation Hybrid` 已完成并封板；WindLetter v1.0 的 8 个 mode × algorithm × signing 协议组合均已有真实 crypto + JSON wire E2E。当前等待用户确认阶段 6 `windletter-api` 真实编排。
+> 状态：阶段 6 `windletter-api` 真实 raw-wire 编排已完成并封板；当前等待用户确认阶段 7 `Armor、Testkit 与可运行 Demo`。
 
 **目标：** 在不使用 mock、不绕过协议校验、不过度建设未来框架的前提下，完成 WindLetter v1.0 当前已定义能力的真实、完整、可运行 Demo。
 
@@ -133,7 +133,7 @@ Outer 与 inner 都必须：
 
 - 正式 Wind Letter v1.0 wire 是 outer JSON；Armor 作为 WindLetter 项目扩展，只可逆封装 exact UTF-8 outer JSON bytes，不改变协议语义。
 - Base64URL text armor 和 binary armor 必须先形成明确 framing/canonical/error contract 再实现。
-- 现有文档没有给出足以唯一实现 `WIND_BASE_1024F_V1` 的完整 1024 字符表和 bit packing。阶段 7 开始前必须由用户批准完整 contract；在此之前不自行发明，也不宣称该格式完成。
+- 现有文档没有给出足以唯一实现 `WIND_BASE_1024F_V1` 的完整 1024 字符表和 bit packing。阶段 7 可先审计并推进 Base64URL/binary contract 的形成、批准与随后实现；在用户批准完整 contract 前不得实现或计入 `WIND_BASE_1024F_V1`。若用户将该格式列为 Demo 必需项，这项决议才是阶段 7 最终封板 blocker。
 
 ## 5. 阶段总表
 
@@ -145,7 +145,7 @@ Outer 与 inner 都必须：
 | 3 | public × Hybrid × signed/unsigned | protocol | 已完成并封板 |
 | 4 | obfuscation × X25519 × signed/unsigned | protocol | 已完成并封板（606 tests；0 failure/error/skip） |
 | 5 | obfuscation × Hybrid × signed/unsigned；8 组合封板 | protocol、testkit tests | 已完成并封板（694 tests；0 failure/error/skip） |
-| 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 执行中 |
+| 6 | API Sender/Receiver 真实 raw-wire 编排 | api、protocol | 已完成（2026-07-22） |
 | 7 | Armor、最终 testkit、可运行 Demo | armor、api、testkit | 未开始 |
 
 ## 6. 阶段 1：Public X25519 Unsigned 真实纵向主链
@@ -409,6 +409,17 @@ ProtocolSender
 - `DecryptStatus`、`VerificationStatus`、payload、identity 和 `ErrorCode` 组合一致。
 - API 真实 E2E、错误映射测试和 `mvn -q test` 通过。
 
+### 实际完成证据（2026-07-22）
+
+- `WindLetterRuntime` 已把公开 `WindLetterSender` / `WindLetterReceiver` 与 recipient resolver、sender/recipient key store、identity service 接通；调用者不再直接依赖 concrete protocol flow。
+- public/obfuscation × X25519/Hybrid × unsigned/signed 全部 8 个 profile 均以 `ArmorFormat.NONE` 运行真实 strict JSON wire、真实 BC crypto、binding 与可选 Ed25519 验签。
+- 正例矩阵覆盖 8 profiles × text/binary = 16 条；public 多收件人、obfuscation padding/routing、三种 verification policy、`decryptAndVerify`、NFM、generic invalid 与 owned lease 生命周期均通过 API seam。
+- 失败语义已覆盖 malformed、AAD、GCM、binding、signature、resolver exception 与 multiple-close；wire-controlled failure 不泄露内部阶段，Hybrid key pair 不跨 lease 拼接。
+- 封板文档提交前的阶段实现由九个独立闭环完成，范围为 `0ce826d` 至实现封板 `4384699`；本次封板文档另行提交，既存 `docs/README.md` 行尾噪音未进入任何提交。
+- 使用 Microsoft OpenJDK 17.0.16 fresh 执行 `mvn -q clean test`：87 suites / 746 tests，0 failure、0 error、0 skipped；`@Disabled/@Ignore` 为 0，`git diff --check` 通过。
+- 独立 production/security、test-quality 与 phase-completeness review 均为 P0=0、P1=0；全部后置 P2 的影响和建议记录在 `docs/dev/10-phase-6-api-orchestration-plan.md` §6。
+- 本阶段只封板 raw JSON API 编排；armor、testkit 与可运行 Demo 入口仍属于阶段 7，不能把 Phase 6 完成表述为完整 Demo 已完成。
+
 ## 12. 阶段 7：Armor、Testkit 与可运行 Demo
 
 ### 能力目标
@@ -538,20 +549,20 @@ mvn -q test
 
 ## 17. 当前阻塞与下一步
 
-阶段 5 已完成并封板。当前 `public/obfuscation × X25519/X25519ML-KEM-768 × unsigned/signed` 八组合均有真实 Sender/Receiver、JSON wire 与 payload E2E；2026-07-21 使用指定 JDK 17 fresh 验证全仓 80 suites、694 tests，0 failure、0 error、0 skipped。Phase 5 final protocol/security、test-quality 与 phase-completeness review 均为 P0=0、P1=0。
+阶段 6 已完成并封板。当前全部 8 个协议 profile 不仅有 protocol 层真实 Sender/Receiver，也已经由 `windletter-api` 的公开 Runtime、DTO 与 SPI 以 raw JSON 端到端接通；2026-07-22 使用指定 JDK 17 fresh 验证全仓 87 suites / 746 tests，0 failure、0 error、0 skipped，三类最终审查均为 P0=0、P1=0。
 
-分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音仍保持未纳入。Phase 5 的主链断点已经消除，下一条真实 Demo 主链断点是 `windletter-api` 尚未把 resolver/store、key lease、8 个 protocol flow、认证策略和公开错误映射编排为调用者可用的 Sender/Receiver。
+分支继续为 `spike/demo-v0`；既存 `docs/README.md` 行尾状态噪音仍保持未纳入。Phase 6 的 API 主链断点已经消除，下一条真实 Demo 主链断点是阶段 7：armor 尚未实现/接入 API，testkit 尚未形成最终回归矩阵，且没有可独立运行的 `WindLetterDemo` 入口。
 
-ML-KEM-768 kid 已通过正式协议末尾“开发修订”冻结为 `BASE64URL(SHA-256(raw 1184-byte public key))`。Phase 3 最终 spec 与 code/security review 均无 Critical/Important/P0/P1；累计 P2 详见 `docs/dev/05-phase-3-public-hybrid-implementation-plan.md` §12。
+阶段 7 开始时必须先核对并批准可实现的 armor contract：
 
-已知但不阻塞下一阶段的问题：
+- Base64URL text armor 与 binary armor 只能按正式、已批准的格式实现，并验证 exact outer JSON bytes round-trip。
+- `WIND_BASE_1024F_V1` 仍缺完整字符表与 bit packing contract；该决议只阻塞此格式的实现与是否计入范围，不阻塞阶段 7 对 Base64URL/binary、testkit 和 Demo 的审计与开发。若完整 Demo 被要求必须包含该格式，它才是最终封板 blocker。
+- `DecryptRequest` 的 raw/text/binary exact-one、auto-detect 与错误映射需在同一阶段统一收口，不能用猜测格式或 mock 绕过。
 
-- 正式协议对 signed inner 的 `typ`、flattened JWS 展示结构和 receiver 侧非 JCS 接受策略仍有文档歧义；可执行 profile 已由阶段 2 exact-byte tests 冻结，正式文档清理作为 P2 后置。
-- Stage 1 保留少量 hardening：GCM AAD helper 显式 ASCII 校验、outer protected strict UTF-8 decoder、wire writer 异常分类收窄、含数组值对象的相等语义与第三方 provider 违约防御。
-- 阶段 2 的 signed/unsigned orchestration 重复、effective payload 上限、Java immutable string 清零边界和 API dormant invariants 等 P2 详见 `docs/dev/03-phase-2-signed-authentication-plan.md` §11。
-- 阶段 3 仍有完整 Hybrid pair 规范化表述、canonical Base64URL/封闭字段集、内部错误到 API 公开 `InvalidMessage` 的映射，以及少量生命周期/测试 hardening P2；实现已采取更严格行为，不影响当前协议链正确性。
-- 阶段 4 的 20 项 P2 主要是重复编排、API 公开错误映射、不可销毁 immutable 数据边界和测试 hardening；影响与建议详见 `docs/dev/07-phase-4-obfuscation-x25519-implementation-plan.md` §11，其中 API obfuscation DTO/mapper 与公开 `InvalidMessage` 映射必须在阶段 6 接线时处理。
-- 阶段 5 的 23 项 P2 主要是完整扫描性能预算、阶段专用重复、provider-contract/lifecycle 测试深度和少量跨层重复矩阵；影响与建议详见 `docs/dev/09-phase-5-obfuscation-hybrid-implementation-plan.md` §12。已知项不构成协议、密码学或认证 P0/P1；API 错误统一和 Hybrid key lease 属阶段 6 正式范围。
-- `WIND_BASE_1024F_V1` 仍缺完整字符表和 bit packing contract；必须在阶段 7 前获得明确决议，当前不阻塞阶段 6 API 编排。
+当前已知非阻塞 P2：
 
-下一阶段建议进入阶段 6 `windletter-api` 真实编排，先审计现有 DTO/SPI 与 8 条 protocol flow 的映射断点，再形成 `docs/dev/10-phase-6-api-orchestration-plan.md`。按大阶段确认规则，本阶段封板后停止开发，等待用户明确确认；不提前进入 API、armor 或 Demo 入口。
+- 阶段 1—5 的累计 P2 继续由各阶段计划维护，均未升级为协议、密码学或认证 P0/P1。
+- 阶段 6 的 identity TOCTOU、kid 校验下沉、Receiver 重复、API 负例重复度、Runtime 扩展性、运行时治理及维护项，已在 `docs/dev/10-phase-6-api-orchestration-plan.md` §6 逐项写明影响与后续建议。
+- 这些 P2 默认不先于 armor/testkit/Demo 主链处理；若阶段 7 审计发现其中任何一项升级为 P0/P1，再调整顺序。
+
+下一阶段建议进入阶段 7，但按大阶段确认规则在此停止开发，等待用户明确确认。确认后先审计 `windletter-armor`、`windletter-testkit`、正式 armor 段落与已有构建状态，再编写/更新 `docs/dev/11-phase-7-armor-testkit-demo-plan.md`，分闭环实现并提交；不提前声明完整 Demo。

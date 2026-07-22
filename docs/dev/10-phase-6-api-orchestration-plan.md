@@ -1,9 +1,10 @@
 # Phase 6：windletter-api 真实编排实施计划
 
-> 状态：执行中
+> 状态：已完成并封板（2026-07-22）
 > 分支：`spike/demo-v0`
 > 起始 HEAD：`f1be4e16c34e60216fe5970e5a705c4059bd5a4f`
 > 基线：Microsoft OpenJDK 17.0.16；fresh `mvn -q clean test` 为 80 suites / 694 tests，0 failure、0 error、0 skipped
+> 封板：实现 HEAD `4384699`；fresh `mvn -q clean test` 为 87 suites / 746 tests，0 failure、0 error、0 skipped
 > 工作区边界：既存 `docs/README.md` 行尾状态噪音不处理、不暂存、不提交
 
 ## 1. 阶段目标
@@ -146,14 +147,28 @@ API request
 - focused tests、`mvn -q -pl windletter-api -am test`、fresh `mvn -q clean test` 全绿。
 - `git diff --check` 通过；无新增 `@Disabled/@Ignore`；独立 protocol/security/test review 为 P0=0、P1=0。
 
+### 实际封板证据（2026-07-22）
+
+- 封板文档提交前的九个小闭环依次完成计划/合同、四类 profile、runtime、八组合矩阵和失败语义封口：`0ce826d`、`5673620`、`88a5e81`、`54c4fec`、`8e4a4ab`、`c613257`、`2c5e430`、`a89cc0c`、`4384699`；本次封板文档另行独立提交。
+- `WindLetterRuntime` 已经把公开 Sender/Receiver 与调用方提供的 SPI 接通；8 个 raw JSON profile 均走 strict parser、真实 BC 原语、真实 binding 和 signed 可选验签。
+- 正例矩阵为 2 modes × 2 algorithms × signed/unsigned × text/binary = 16 条；另有 4 条全 profile `NOT_FOR_ME`、4 条全 profile GCM invalid，以及 malformed/AAD/binding/signature/resolver/multiple-close 等代表性 API 负例。
+- hardening 聚焦 40 tests 与 `mvn -q -pl windletter-api -am test` 均通过。
+- 使用 Microsoft OpenJDK 17.0.16 fresh 执行 `mvn -q clean test`：87 suites / 746 tests，0 failure、0 error、0 skipped；源码扫描 `@Disabled/@Ignore` 为 0；`git diff --check` 通过。
+- 独立 production/security、test-quality 与 phase-completeness review 均为 P0=0、P1=0；Public Hybrid 在过滤 x-only lease 前验证真实 X25519 kid 的审查缺口已经由红测修复。
+- 既存 `docs/README.md` 行尾状态噪音始终未处理、未暂存、未提交；Phase 7 未开始。
+
 ## 6. 明确后置到阶段 7 或 Demo 后的 P2
 
-- Armor 输入 exact-one contract、所有 armor 编排与 auto-detect（阶段 7）。
-- 把 verification key 与 sender identity 两次查询合并为原子 trusted identity record，以消除 TOCTOU。
-- 将 canonical kid 校验统一下沉到所有 material/lease 构造器；阶段 6 mapper 先完整执行真实派生校验。
-- 通用 flow registry、DI 容器、ServiceLoader、算法插件框架。
-- replay store、候选数量 policy cap、缓存、性能与 timing 基准。
-- 清理 dormant `UNSUPPORTED`、`SigningOption` 等冗余类型。
-- 去除 16 条 concrete flow 的少量 dispatch/mapper 重复。
+以下均经复核为 P2，不影响本阶段协议、密码学、认证或资源所有权正确性：
 
-以上 P2 若未演变成协议、安全或正确性 P0/P1，不阻塞 Demo 主链。
+- **Armor 与输入 exact-one（阶段 7）**：`DecryptRequest` 目前仍可构造 raw/armor 表示歧义，但 Phase 6 runtime 会在密码学前拒绝非单一 raw JSON。阶段 7 应在统一 normalize 层冻结 text/binary armor、auto-detect 与 exact-one 合同。
+- **可信身份查询 TOCTOU**：verification key 与 sender identity 分两次查询；本地信任库并发变化时，两份元数据可能不属于同一快照，但签名与 kid 校验不会被远程绕过。后续合并为原子 `TrustedIdentityMaterial` 查询。
+- **canonical kid 校验位置分散**：当前 facade mapper/flow entry 会从真实 public key 派生并核对 kid，本地错误对象仍可先被构造、到使用时才失败。后续统一下沉到 material/lease factory 或构造器。
+- **四套 Receiver 重复**：dispatch、generic error、trusted signing resolver 与 `closeAll` 存在重复，影响是后续修改可能漂移；本阶段发现并修复的 Public Hybrid x-only 校验顺序即属此类风险。Demo 后抽取共享 receiver harness/mapper，不在主链前做框架化。
+- **API 负例为分层代表性覆盖**：4 profiles 已逐一覆盖 NFM 与 GCM invalid；malformed/AAD/binding/signature/resolver/multiple-close 主要通过 public X25519 seam 证明，signed NFM/GCM、其他三类 receiver 的 close 聚合、pending failure + close failure、Hybrid cross-stitch/duplicate-pair 未在 API 层逐项重复。protocol 负例与 lease 单元测试提供部分分层证据，但所列 API 组合仍待补；阶段 7 回归矩阵再参数化，避免未来 profile-specific 重构漏测。
+- **少量测试诊断强度**：customHeaders 用例未额外统计 recipient public resolver，resolver exception 用例未断言调用次数与 marker identity；现有前置拒绝、异常类型和全 lease 关闭已经成立。后续随参数化负例补充，不阻塞 Demo。
+- **最小 Runtime/扩展能力**：`WindLetterRuntime` 只做 BC 默认实现 composition，不提供 DI、ServiceLoader、算法注册或 provider 插件；SPI 生命周期由调用方持有。影响仅是扩展性，Demo 后按实际需要建设并补充更完整 Javadoc。
+- **运行时治理**：replay store、receiver candidate policy cap、缓存、timing/性能基准未实现；影响是生产环境的重放/DoS 策略和容量治理，不改变当前 Demo 协议结果。Demo 后按威胁模型和实测数据补。
+- **维护与非敏感内存卫生**：dormant `UNSUPPORTED`、`SigningOption`、`customHeaders` 旧注释、concrete flow/mapper 重复以及部分仅含 public key 的临时 record copy 尚未清理。影响是可读性和公共数据内存卫生，不是私钥泄露或认证缺陷；Demo 后集中处理。
+
+以上 P2 若未演变成协议、安全或正确性 P0/P1，不阻塞阶段 7。
