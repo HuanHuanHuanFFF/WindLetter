@@ -168,25 +168,32 @@ final class PublicHybridReceiverOrchestrator {
             if (lease == null) {
                 throw new IllegalStateException("recipient key store returned a null lease");
             }
-            String mlkem768Kid = lease.mlkem768Kid();
-            MLKem768PrivateKeyHandle mlkem768PrivateKey = lease.mlkem768PrivateKey();
-            if (mlkem768Kid == null && mlkem768PrivateKey == null) {
-                continue;
-            }
-            if (mlkem768Kid == null || mlkem768PrivateKey == null) {
-                throw new IllegalStateException("recipient key store returned an incomplete Hybrid lease");
-            }
-
             X25519PrivateKeyHandle x25519PrivateKey = lease.x25519PrivateKey();
             byte[] x25519PublicKey = x25519PrivateKey.publicKey();
-            byte[] mlkem768PublicKey = mlkem768PrivateKey.publicKey();
+            byte[] mlkem768PublicKey = null;
             try {
                 String x25519Kid = X25519KeyId.derive(x25519PublicKey);
-                String derivedMlkem768Kid = MLKem768KeyId.derive(mlkem768PublicKey);
-                if (!x25519Kid.equals(lease.x25519Kid())
-                    || !derivedMlkem768Kid.equals(mlkem768Kid)) {
+                if (!x25519Kid.equals(lease.x25519Kid())) {
                     throw new IllegalStateException(
-                        "recipient Hybrid lease kids do not match their public keys"
+                        "recipient X25519 lease kid does not match its public key"
+                    );
+                }
+
+                String mlkem768Kid = lease.mlkem768Kid();
+                MLKem768PrivateKeyHandle mlkem768PrivateKey = lease.mlkem768PrivateKey();
+                if (mlkem768Kid == null && mlkem768PrivateKey == null) {
+                    continue;
+                }
+                if (mlkem768Kid == null || mlkem768PrivateKey == null) {
+                    throw new IllegalStateException(
+                        "recipient key store returned an incomplete Hybrid lease"
+                    );
+                }
+                mlkem768PublicKey = mlkem768PrivateKey.publicKey();
+                String derivedMlkem768Kid = MLKem768KeyId.derive(mlkem768PublicKey);
+                if (!derivedMlkem768Kid.equals(mlkem768Kid)) {
+                    throw new IllegalStateException(
+                        "recipient ML-KEM lease kid does not match its public key"
                     );
                 }
                 if (!seenPairs.add(new RecipientPair(x25519Kid, derivedMlkem768Kid))) {

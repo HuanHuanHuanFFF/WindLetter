@@ -34,6 +34,7 @@ import com.windletter.api.spi.SenderPublicKeyResolver;
 import com.windletter.api.spi.SigningIdentityLease;
 import com.windletter.api.spi.VerificationKeyMaterial;
 import com.windletter.api.spi.X25519PublicKeyMaterial;
+import com.windletter.core.error.ErrorCode;
 import com.windletter.crypto.api.Ed25519PrivateKeyHandle;
 import com.windletter.crypto.api.MLKem768PrivateKeyHandle;
 import com.windletter.crypto.api.X25519PrivateKeyHandle;
@@ -43,7 +44,9 @@ import com.windletter.crypto.bc.BouncyCastleX25519Crypto;
 import com.windletter.protocol.key.Ed25519KeyId;
 import com.windletter.protocol.key.MLKem768KeyId;
 import com.windletter.protocol.key.X25519KeyId;
+import com.windletter.protocol.codec.JacksonOuterWireWriter;
 import com.windletter.protocol.parser.JacksonOuterWireParser;
+import com.windletter.protocol.wire.WindLetter;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -80,6 +83,159 @@ class WindLetterEightProfileApiE2ETest {
                         + "/" + payloadCase.name(),
                     () -> roundTrip(mode, profile, signed, payloadCase)
                 )))));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> allReceiverProfilesReturnNotForMeAndCloseUnrelatedLeases() {
+        return Stream.of(WindMode.PUBLIC, WindMode.OBFUSCATION)
+            .flatMap(mode -> Stream.of(
+                KeyAlgProfile.X25519,
+                KeyAlgProfile.X25519_ML_KEM_768
+            ).map(profile -> DynamicTest.dynamicTest(
+                mode + "/" + profile + "/not-for-me",
+                () -> notForMe(mode, profile)
+            )));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> allReceiverProfilesHideCiphertextFailureAndCloseMatchingLeases() {
+        return Stream.of(WindMode.PUBLIC, WindMode.OBFUSCATION)
+            .flatMap(mode -> Stream.of(
+                KeyAlgProfile.X25519,
+                KeyAlgProfile.X25519_ML_KEM_768
+            ).map(profile -> DynamicTest.dynamicTest(
+                mode + "/" + profile + "/invalid-ciphertext",
+                () -> invalidCiphertext(mode, profile)
+            )));
+    }
+
+    private static void notForMe(WindMode mode, KeyAlgProfile profile) {
+        try (Fixture keys = new Fixture(profile)) {
+            EncryptedMessage encrypted = encryptUnsigned(mode, profile, keys);
+            X25519PrivateKeyHandle unrelatedX = keys.x25519.generatePrivateKey();
+            MLKem768PrivateKeyHandle unrelatedMl = profile == KeyAlgProfile.X25519_ML_KEM_768
+                ? keys.mlkem.generatePrivateKey()
+                : null;
+            byte[] xPublic = unrelatedX.publicKey();
+            byte[] mlPublic = unrelatedMl == null ? null : unrelatedMl.publicKey();
+            String xKid = X25519KeyId.derive(xPublic);
+            String mlKid = mlPublic == null ? null : MLKem768KeyId.derive(mlPublic);
+            clear(xPublic);
+            clear(mlPublic);
+            RecipientKeyStore unrelatedStore = identity -> profile == KeyAlgProfile.X25519
+                ? List.of(DecryptionKeyLease.x25519(xKid, unrelatedX))
+                : List.of(DecryptionKeyLease.hybrid(
+                    xKid,
+                    unrelatedX,
+                    mlKid,
+                    unrelatedMl
+                ));
+            try {
+                WindLetterReceiver receiver = WindLetterRuntime.receiver(
+                    unrelatedStore,
+                    keys,
+                    keys
+                );
+                DecryptResult result = receiver.decrypt(decryptRequest(encrypted.wireJson()));
+                assertNotForMe(result);
+                assertClosed(unrelatedX);
+                if (unrelatedMl != null) {
+                    assertClosed(unrelatedMl);
+                }
+            } finally {
+                unrelatedX.close();
+                if (unrelatedMl != null) {
+                    unrelatedMl.close();
+                }
+            }
+        }
+    }
+
+    private static void invalidCiphertext(WindMode mode, KeyAlgProfile profile) {
+        try (Fixture keys = new Fixture(profile)) {
+            EncryptedMessage encrypted = encryptUnsigned(mode, profile, keys);
+            WindLetterReceiver receiver = WindLetterRuntime.receiver(keys, keys, keys);
+            DecryptResult result = receiver.decrypt(decryptRequest(
+                flipCiphertext(encrypted.wireJson())
+            ));
+
+            assertGenericInvalid(result);
+            assertClosed(keys.recipient2X25519);
+            if (profile == KeyAlgProfile.X25519_ML_KEM_768) {
+                assertClosed(keys.recipient2MlKem);
+            }
+            assertEquals(0, keys.verificationLookups);
+            assertEquals(0, keys.identityLookups);
+        }
+    }
+
+    private static EncryptedMessage encryptUnsigned(
+        WindMode mode,
+        KeyAlgProfile profile,
+        Fixture keys
+    ) {
+        WindLetterSender sender = WindLetterRuntime.sender(keys, keys, keys);
+        return sender.encrypt(new EncryptRequest(
+            mode,
+            profile,
+            ArmorFormat.NONE,
+            new Payload("application/octet-stream", new byte[] {0, 1, 2}, 3),
+            keys.recipientRefs(),
+            Map.of(),
+            mode == WindMode.PUBLIC
+                ? new SenderEncryptionIdentityRef("sender", keys.senderKid)
+                : null
+        ));
+    }
+
+    private static DecryptRequest decryptRequest(String wireJson) {
+        return new DecryptRequest(
+            wireJson,
+            null,
+            null,
+            ArmorFormat.NONE,
+            new RecipientIdentityRef("recipient-2", null),
+            VerificationPolicy.AUTO_BY_CTY
+        );
+    }
+
+    private static String flipCiphertext(String wireJson) {
+        WindLetter letter = new JacksonOuterWireParser().parse(wireJson);
+        byte[] ciphertext = letter.ciphertext();
+        try {
+            ciphertext[0] ^= 1;
+            return new JacksonOuterWireWriter().write(new WindLetter(
+                letter.protectedHeader(),
+                letter.protectedValue(),
+                letter.aad(),
+                letter.recipients(),
+                letter.iv(),
+                ciphertext,
+                letter.tag()
+            ));
+        } finally {
+            clear(ciphertext);
+        }
+    }
+
+    private static void assertNotForMe(DecryptResult result) {
+        assertEquals(DecryptStatus.NOT_FOR_ME, result.status());
+        assertEquals(VerificationStatus.NOT_APPLICABLE, result.verificationStatus());
+        assertEquals(ErrorCode.NOT_FOR_ME, result.errorCode());
+        assertNull(result.payload());
+        assertNull(result.senderIdentity());
+        assertNull(result.messageId());
+        assertNull(result.timestamp());
+    }
+
+    private static void assertGenericInvalid(DecryptResult result) {
+        assertEquals(DecryptStatus.INVALID_MESSAGE, result.status());
+        assertEquals(VerificationStatus.FAILED, result.verificationStatus());
+        assertEquals(ErrorCode.INVALID_MESSAGE, result.errorCode());
+        assertNull(result.payload());
+        assertNull(result.senderIdentity());
+        assertNull(result.messageId());
+        assertNull(result.timestamp());
     }
 
     private static void roundTrip(

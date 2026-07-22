@@ -172,6 +172,45 @@ class PublicHybridApiE2ETest {
         }
     }
 
+    @Test
+    void malformedXOnlyLeaseIsALocalFailureBeforeCompatibilityFiltering() {
+        try (Fixture keys = new Fixture()) {
+            WindLetterSender sender = new DefaultWindLetterSender(keys, keys, keys);
+            Payload payload = new Payload("text/plain", new byte[] {1, 2, 3}, 3);
+            EncryptedMessage encrypted = sender.encrypt(new EncryptRequest(
+                WindMode.PUBLIC,
+                KeyAlgProfile.X25519_ML_KEM_768,
+                ArmorFormat.NONE,
+                payload,
+                keys.recipientRefs(),
+                Map.of(),
+                new SenderEncryptionIdentityRef("sender", null)
+            ));
+
+            X25519PrivateKeyHandle mismatched = keys.x25519.generatePrivateKey();
+            RecipientKeyStore malformedStore = identity -> List.of(
+                DecryptionKeyLease.x25519(keys.recipient1XKid, mismatched)
+            );
+            WindLetterReceiver receiver = new DefaultWindLetterReceiver(
+                malformedStore,
+                keys,
+                keys
+            );
+
+            assertThrows(IllegalStateException.class, () -> receiver.decrypt(
+                new DecryptRequest(
+                    encrypted.wireJson(),
+                    null,
+                    null,
+                    ArmorFormat.NONE,
+                    new RecipientIdentityRef("malformed-local-store", null),
+                    VerificationPolicy.AUTO_BY_CTY
+                )
+            ));
+            assertClosed(mismatched);
+        }
+    }
+
     private static void assertClosed(X25519PrivateKeyHandle handle) {
         assertThrows(IllegalStateException.class, handle::publicKey);
     }
