@@ -133,7 +133,7 @@ Outer 与 inner 都必须：
 
 - 正式 Wind Letter v1.0 wire 是 outer JSON；Armor 作为 WindLetter 项目扩展，只可逆封装 exact UTF-8 outer JSON bytes，不改变协议语义。
 - Base64URL text armor 和 binary armor 必须先形成明确 framing/canonical/error contract 再实现。
-- 现有文档没有给出足以唯一实现 `WIND_BASE_1024F_V1` 的完整 1024 字符表和 bit packing。阶段 7 可先审计并推进 Base64URL/binary contract 的形成、批准与随后实现；在用户批准完整 contract 前不得实现或计入 `WIND_BASE_1024F_V1`。若用户将该格式列为 Demo 必需项，这项决议才是阶段 7 最终封板 blocker。
+- `docs/dev/11-wind-base-1024f-v1-alphabet-draft.md` 已形成可复现的 1024 字候选字母表并通过机器校验，但仍待用户批准，bit packing/framing 也尚未冻结。阶段 7 可先审计并推进 Base64URL/binary contract；在完整 contract 获批前不得实现或计入 `WIND_BASE_1024F_V1`。若用户将该格式列为 Demo 必需项，这些未决项才是阶段 7 最终封板 blocker。
 
 ## 5. 阶段总表
 
@@ -428,7 +428,7 @@ ProtocolSender
 
 - 批准后的 Base64URL text armor contract 与实现。
 - 批准后的 binary armor contract 与实现。
-- 若完整字符表/packing contract 获批准，则实现 `WIND_BASE_1024F_V1`；否则不能把它计入完成项。
+- 若候选字母表与完整 packing/framing contract 获批准，则实现 `WIND_BASE_1024F_V1`；否则不能把它计入完成项。
 - Armor auto-detect、严格解析、长度/版本/非法输入处理。
 - API armor 编排。
 - testkit 完整正例、负例、向量和回归矩阵。
@@ -556,7 +556,7 @@ mvn -q test
 阶段 7 开始时必须先核对并批准可实现的 armor contract：
 
 - Base64URL text armor 与 binary armor 只能按正式、已批准的格式实现，并验证 exact outer JSON bytes round-trip。
-- `WIND_BASE_1024F_V1` 仍缺完整字符表与 bit packing contract；该决议只阻塞此格式的实现与是否计入范围，不阻塞阶段 7 对 Base64URL/binary、testkit 和 Demo 的审计与开发。若完整 Demo 被要求必须包含该格式，它才是最终封板 blocker。
+- `WIND_BASE_1024F_V1` 的候选 1024 字表已经生成并机器校验，但尚待用户批准，bit packing/framing contract 仍未形成；这些未决项只阻塞此格式的实现与是否计入范围，不阻塞阶段 7 对 Base64URL/binary、testkit 和 Demo 的审计与开发。若完整 Demo 被要求必须包含该格式，它们才是最终封板 blocker。
 - `DecryptRequest` 的 raw/text/binary exact-one、auto-detect 与错误映射需在同一阶段统一收口，不能用猜测格式或 mock 绕过。
 
 当前已知非阻塞 P2：
