@@ -28,6 +28,20 @@ public interface MLKem768Crypto {
     MLKem768PrivateKeyHandle importPrivateKey(byte[] privateKey);
 
     /**
+     * Export the canonical ML-KEM-768 decapsulation-key encoding.
+     *
+     * @param privateKey private key handle created by this crypto implementation
+     * @return caller-owned defensive copy of the 2400-byte FIPS 203 DK encoding
+     * The caller is responsible for clearing the returned array after use.
+     * @throws IllegalArgumentException if privateKey is null or from another implementation
+     * @throws IllegalStateException if private key handle has been closed
+     * @throws UnsupportedOperationException if this implementation does not support private-key export
+     */
+    default byte[] exportPrivateKey(MLKem768PrivateKeyHandle privateKey) {
+        throw new UnsupportedOperationException("private key export is not supported");
+    }
+
+    /**
      * Encapsulate to a recipient public key.
      *
      * @param publicKey ML-KEM-768 public key (1184 bytes)

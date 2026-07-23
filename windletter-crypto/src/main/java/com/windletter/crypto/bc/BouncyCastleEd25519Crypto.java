@@ -58,6 +58,13 @@ public final class BouncyCastleEd25519Crypto implements Ed25519Crypto {
     }
 
     @Override
+    public byte[] exportPrivateKey(Ed25519PrivateKeyHandle privateKey) {
+        Handle internalHandle = requireHandle(privateKey);
+        internalHandle.ensureNotDestroyed();
+        return internalHandle.privateKey.clone();
+    }
+
+    @Override
     public byte[] sign(Ed25519PrivateKeyHandle privateKey, byte[] message) {
         Handle internalHandle = requireHandle(privateKey);
         validateMessage(message);

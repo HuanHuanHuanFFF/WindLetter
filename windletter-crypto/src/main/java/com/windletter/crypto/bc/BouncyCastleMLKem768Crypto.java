@@ -64,6 +64,13 @@ public final class BouncyCastleMLKem768Crypto implements MLKem768Crypto {
     }
 
     @Override
+    public byte[] exportPrivateKey(MLKem768PrivateKeyHandle privateKey) {
+        Handle internalHandle = requireHandle(privateKey);
+        internalHandle.ensureNotDestroyed();
+        return internalHandle.privateKey.clone();
+    }
+
+    @Override
     public MLKem768Encapsulation encapsulate(byte[] publicKey) {
         validatePublicKey(publicKey);
         SecretWithEncapsulation kemResult = null;

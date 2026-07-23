@@ -28,6 +28,20 @@ public interface Ed25519Crypto {
     Ed25519PrivateKeyHandle importPrivateKey(byte[] privateKey);
 
     /**
+     * Export the canonical Ed25519 private seed encoding.
+     *
+     * @param privateKey private key handle created by this crypto implementation
+     * @return caller-owned defensive copy of the 32-byte private seed
+     * The caller is responsible for clearing the returned array after use.
+     * @throws IllegalArgumentException if privateKey is null or from another implementation
+     * @throws IllegalStateException if private key handle has been closed
+     * @throws UnsupportedOperationException if this implementation does not support private-key export
+     */
+    default byte[] exportPrivateKey(Ed25519PrivateKeyHandle privateKey) {
+        throw new UnsupportedOperationException("private key export is not supported");
+    }
+
+    /**
      * Sign a message using Ed25519 private key handle.
      *
      * @param privateKey private key handle

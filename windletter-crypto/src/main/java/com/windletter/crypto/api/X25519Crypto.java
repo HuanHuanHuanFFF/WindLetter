@@ -29,6 +29,20 @@ public interface X25519Crypto {
     X25519PrivateKeyHandle importPrivateKey(byte[] privateKey);
 
     /**
+     * Export the canonical raw encoding of an X25519 private key.
+     *
+     * @param privateKey private key handle created by this crypto implementation
+     * @return caller-owned defensive copy of the 32-byte raw private key
+     * The caller is responsible for clearing the returned array after use.
+     * @throws IllegalArgumentException if privateKey is null or from another implementation
+     * @throws IllegalStateException if private key handle has been closed
+     * @throws UnsupportedOperationException if this implementation does not support private-key export
+     */
+    default byte[] exportPrivateKey(X25519PrivateKeyHandle privateKey) {
+        throw new UnsupportedOperationException("private key export is not supported");
+    }
+
+    /**
      * Compute X25519 shared secret using local private key handle and peer public key.
      *
      * @param privateKey local private key handle

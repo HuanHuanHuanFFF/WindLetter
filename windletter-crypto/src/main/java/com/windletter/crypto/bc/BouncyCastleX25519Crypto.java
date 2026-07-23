@@ -51,6 +51,13 @@ public final class BouncyCastleX25519Crypto implements X25519Crypto {
     }
 
     @Override
+    public byte[] exportPrivateKey(X25519PrivateKeyHandle privateKey) {
+        Handle internalHandle = requireHandle(privateKey);
+        internalHandle.ensureNotDestroyed();
+        return internalHandle.privateKey.clone();
+    }
+
+    @Override
     public byte[] deriveSharedSecret(X25519PrivateKeyHandle privateKey, byte[] peerPublicKey) {
         Handle internalHandle = requireHandle(privateKey);
         validatePeerPublicKey(peerPublicKey);
