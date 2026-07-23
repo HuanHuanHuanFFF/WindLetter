@@ -25,7 +25,24 @@ class EncryptRequestTest {
                 ArmorFormat.NONE,
                 payload,
                 List.of(),
-                Map.of()
+                Map.of(),
+                new SenderEncryptionIdentityRef("sender", null)
+            )
+        );
+    }
+
+    @Test
+    void shouldRequireSenderEncryptionIdentity() {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new EncryptRequest(
+                WindMode.PUBLIC,
+                KeyAlgProfile.X25519,
+                ArmorFormat.NONE,
+                new Payload("text/plain", new byte[] {1}, 1),
+                List.of(new RecipientRef("r1", "kid-x", null, Map.of())),
+                Map.of(),
+                null
             )
         );
     }
@@ -43,7 +60,8 @@ class EncryptRequestTest {
             null,
             new Payload("text/plain", new byte[] {1}, 1),
             recipients,
-            headers
+            headers,
+            new SenderEncryptionIdentityRef("sender", "active")
         );
 
         recipients.clear();

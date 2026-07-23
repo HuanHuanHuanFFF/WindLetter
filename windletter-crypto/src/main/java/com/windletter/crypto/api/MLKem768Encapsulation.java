@@ -5,7 +5,7 @@ import java.util.Arrays;
 /**
  * ML-KEM-768 encapsulation output container.
  */
-public record MLKem768Encapsulation(byte[] ciphertext, byte[] sharedSecret) {
+public record MLKem768Encapsulation(byte[] ciphertext, byte[] sharedSecret) implements AutoCloseable {
 
     public static final int CIPHERTEXT_LEN = 1088;
     public static final int SHARED_SECRET_LEN = 32;
@@ -29,5 +29,10 @@ public record MLKem768Encapsulation(byte[] ciphertext, byte[] sharedSecret) {
     @Override
     public byte[] sharedSecret() {
         return Arrays.copyOf(sharedSecret, sharedSecret.length);
+    }
+
+    @Override
+    public void close() {
+        Arrays.fill(sharedSecret, (byte) 0);
     }
 }

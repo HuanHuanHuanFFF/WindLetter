@@ -7,7 +7,7 @@ import java.util.Arrays;
  *
  * @param contentType MIME type
  * @param data raw byte data
- * @param originalSize original size (>= 0)
+ * @param originalSize original size, which must equal the data length
  */
 public record Payload(String contentType, byte[] data, long originalSize) {
 
@@ -19,8 +19,8 @@ public record Payload(String contentType, byte[] data, long originalSize) {
     public Payload {
         contentType = ModelChecks.requireNonBlank(contentType, "contentType");
         ModelChecks.requireNonNull(data, "data");
-        if (originalSize < 0) {
-            throw new IllegalArgumentException("originalSize must be >= 0");
+        if (originalSize != data.length) {
+            throw new IllegalArgumentException("originalSize must equal data length");
         }
         data = Arrays.copyOf(data, data.length);
     }

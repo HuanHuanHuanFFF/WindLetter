@@ -961,3 +961,94 @@ $$rid = \text{Base64URL}\bigg( \text{HKDF-Expand}\big(\text{HKDF-Extract}(\text{
   }
 }
 ```
+
+## 开发修订
+
+### 2026-07-18：明确 ML-KEM-768 公钥 kid 派生规则
+
+开发 Public Hybrid 主链时发现：正文将 `kid` 统一描述为 32 字节的 JWK Thumbprint SHA-256，但当前没有稳定、无歧义的 ML-KEM-768 JWK 公钥表示。若不同实现自行选择 JWK 字段，可能为同一把 ML-KEM-768 公钥生成不同的 `kid`。
+
+Wind Letter v1.0 对 ML-KEM-768 公钥 `kid` 作如下修订：
+
+1. 输入必须是 FIPS 203 定义的 **1184 字节原始 ML-KEM-768 公钥** `pk_mlkem768`。
+2. 先计算原始指纹：
+
+   $$kid_{raw}=\mathrm{SHA\text{-}256}(pk_{mlkem768})$$
+
+3. wire 中的 `kid.mlkem768` 为：
+
+   $$kid.mlkem768=\mathrm{BASE64URL}(kid_{raw})$$
+
+   Base64URL 必须使用 URL-safe 字母表且不得包含 `=` padding；严格解码后的长度必须为 32 字节。
+4. SHA-256 的输入只能是上述 1184 字节原始公钥。不得先包装为 JWK、JSON、DER、PEM、SPKI，也不得添加算法名、长度或其他前后缀。
+5. Sender 必须从实际用于该收件人 ML-KEM-768 encapsulation 的公钥重新派生 `kid.mlkem768`，不得直接信任调用方提供的、不与公钥绑定的 kid。
+6. Receiver 或本地密钥存储必须从对应 ML-KEM-768 公钥重新派生并核对 kid；配置中的 kid 与公钥不一致属于本地密钥配置或 provider contract 错误，不得继续解密。
+7. 本修订只改变 ML-KEM-768 公钥 kid 的派生规则；X25519 和 Ed25519 的 JWK Thumbprint 规则保持不变。
+
+若正文中通用的“kid (指纹) = JWK Thumbprint SHA-256”描述与本节冲突，ML-KEM-768 公钥 kid 以本节为准。Wind Letter v1.0 实现不得为 `kid.mlkem768` 使用未在本协议中固定的 JWK 映射；未来若采用标准化的 ML-KEM JWK 表示，应通过新的协议版本明确迁移规则。
+
+### 2026-07-18：明确 Obfuscation X25519 构建顺序、完整扫描与失败语义
+
+开发 `obfuscation + X25519` 主链时发现：正文已经定义 `rid/ecc`、固定分桶和常量时间比较，但没有完整冻结最终收件人顺序、随机打乱、重复命中和低阶 `epk` 的处理。若实现各自选择，可能导致内外层 binding 不一致、真实条目位置泄露、路由提前返回或把无效消息错误降级为 `NotForMe`。
+
+Wind Letter v1.0 对混淆模式作如下修订：
+
+1. 每条 outer message 必须生成一把新的 X25519 临时密钥对。同一条消息的全部真实收件人共享该消息的 `protected.epk`；临时私钥不得跨消息复用。
+2. 对 `key_alg="X25519"`，每个真实收件人的派生参数固定为：
+
+   $$SS_{ECC}=\mathrm{X25519}(sk_{eph},pk_{static}^{recv})$$
+
+   $$rid=\mathrm{HKDF\text{-}SHA256}(salt=\mathrm{UTF8}("wind"),IKM=SS_{ECC},info=\mathrm{UTF8}("rid/ecc"),L=16)$$
+
+   KEK 仍按正文 §5.0(A) 使用 `info="WindLetter v1 KEK | X25519"`、`L=32` 派生。`rid` 与 KEK 必须来自同一次 X25519 共享秘密；实现不得把 `rid` 用作加密密钥。
+3. Sender 必须先构造全部真实 entry，再向上填充到最小的 `{8,16,32}` 桶。`m=0` 或 `m>32` 必须拒绝；重复真实 X25519 公钥必须拒绝。
+4. X25519 诱饵 entry 必须只含随机 16 字节 `rid` 和随机 40 字节 `encrypted_key`，不得含 `kid` 或 `ek`。最终 wire 中所有 `rid` 必须唯一；真实 entry 冲突必须拒绝，诱饵冲突必须重新采样。
+5. 真实 entry 与诱饵 entry 合并后，Sender 必须使用 CSPRNG 执行无偏 Fisher-Yates shuffle。只有最终顺序冻结后，才允许计算 `outer.aad`、`jwe_recipients_hash`、组装或签名 inner，并执行 AES-GCM。正文 §3.2 中“构建 inner”只表示准备 payload、`wind_id` 和 `ts`；包含 binding 的 inner 不得在最终 `protected` 与最终 `recipients` 之前定稿。若正文顺序与本项冲突，以本项为准。
+6. Receiver 必须拒绝重复 wire `rid`，并拒绝重复本地 X25519 公钥记录。对每个不同的本地私钥候选，必须计算候选 `rid`，并与全部 wire entry 的 16 字节 `rid` 做固定长度常量时间比较；发现命中后仍不得提前结束扫描。
+7. 若完整扫描后有多个不同本地身份命中，Receiver 必须选择 wire 顺序中最靠前的命中 entry。只允许对该 entry 执行 CEK unwrap；unwrap、后续 GCM、binding 或验签失败均为 `InvalidMessage`，不得回退尝试其它 entry。
+8. 只有在有效完成候选计算与完整扫描后仍无任何命中时，才返回 `NotForMe`。低阶或全零 `protected.epk` 导致的 X25519 失败属于 `InvalidMessage`，不得降级为 `NotForMe`。
+9. 实现必须在成功与失败路径关闭每消息临时 X25519 私钥，并清除 X25519 shared secret、候选 `rid`、KEK、CEK、inner 和 GCM AAD 等调用方拥有的敏感临时数组。
+
+本修订不改变 wire 字段或算法白名单，也不在阶段 4 引入 Obfuscation Hybrid。Hybrid 的逐 entry `ek`、`rid/hybrid` 和 1088 字节诱饵将在后续阶段按正文既有规则实现。
+
+### 2026-07-21：明确 Obfuscation Hybrid 原子身份、完整扫描与失败语义
+
+开发 `obfuscation + X25519ML-KEM-768` 主链时发现：正文已经定义逐收件人 `ek`、`rid/hybrid` 与 Hybrid 诱饵长度，但没有完整冻结本地 X25519/ML-KEM 身份的配对方式、逐 entry 解封装的完整扫描、多个命中的选择规则，以及 ML-KEM 隐式拒绝与 `NotForMe` 的边界。若实现各自选择，可能发生跨身份拼接、提前结束扫描、错误回退或可观察的解封装 oracle。
+
+Wind Letter v1.0 对 Obfuscation Hybrid 作如下修订：
+
+1. 每个真实收件人和每个本地接收身份都必须是不可拆分的 `(X25519, ML-KEM-768)` 完整密钥对。Sender 和 Receiver 必须拒绝重复的完整 pair；允许不同 pair 复用其中一个 component，但不得把两条本地记录交叉拼成新的身份。对于 `key_alg="X25519ML-KEM-768"`，本项取代 2026-07-18 修订第 6 项中按单一 X25519 公钥判重的要求；该旧要求只适用于 `key_alg="X25519"`。
+2. 每条 outer message 必须生成一把新的 X25519 临时密钥对；该消息全部真实 Hybrid 收件人共享同一个 `protected.epk`。每个真实收件人必须独立执行一次 ML-KEM-768 encapsulation，不得跨 entry 复用 `ek`、`SS_PQ` 或 KEK。
+3. 对每个真实 entry，必须使用同一次 encapsulation 得到的材料按以下顺序联合派生：
+
+   $$Z=SS_{ECC}\ ||\ SS_{PQ}$$
+
+   $$rid=\mathrm{HKDF\text{-}SHA256}(salt=\mathrm{UTF8}("wind"),IKM=Z,info=\mathrm{UTF8}("rid/hybrid"),L=16)$$
+
+   $$KEK=\mathrm{HKDF\text{-}SHA256}(salt=\mathrm{UTF8}("wind"),IKM=Z,info=\mathrm{UTF8}("WindLetter\ v1\ KEK\ |\ X25519ML\text{-}KEM\text{-}768"),L=32)$$
+
+   `rid` 与 KEK 必须来自同一个 `Z`，且 `SS_ECC` 必须在前、`SS_PQ` 必须在后。`rid` 只能用于路由比较，不得作为加密密钥。
+4. Sender 必须先构造全部真实 entry，再填充到最小的 `{8,16,32}` 桶。Hybrid 诱饵 entry 必须含随机 16 字节 `rid`、随机 1088 字节 `ek` 和随机 40 字节 `encrypted_key`，且不得含 `kid`。最终 wire 中所有 `rid` 必须唯一；真实 entry 冲突必须失败，每个诱饵的 `rid` 最多独立重采样 128 次。
+5. 真实 entry 与诱饵 entry 合并后，Sender 必须使用 CSPRNG 执行无偏 Fisher-Yates shuffle。只有最终 `protected` 与最终 recipients 顺序冻结后，才允许计算 outer AAD、两项 inner/outer binding、signed inner 的签名和 AES-GCM。
+6. Receiver 必须先完成 strict wire/profile 校验和 outer AAD 一致性校验，并在读取本地 private-key handle 前拒绝重复 wire `rid`。本地完整 pair 必须先验证、制作稳定输入快照并拒绝重复记录。
+7. 对每个不同的本地完整 pair，Receiver 可以只计算一次该 pair 与 `protected.epk` 的 `SS_ECC`；随后必须对全部 8、16 或 32 个 wire entry 分别使用该 pair 的 ML-KEM private key 解封装当前 entry 的 `ek`，由该 entry 的 `SS_ECC || SS_PQ` 同时派生候选 `rid` 与 KEK，并对固定 16 字节 `rid` 做常量时间比较。发现命中后仍必须完成全部 `local pair × wire entry` 组合的扫描。
+8. 完整扫描出现多个命中时，必须选择字典序最小的 `(wireIndex, localInputIndex)`。只允许使用该组合的 KEK 对对应 entry 执行一次 CEK unwrap；unwrap、GCM、inner、binding 或验签失败均不得回退尝试其它 entry。
+9. ML-KEM-768 对任意恰好 1088 字节 ciphertext 执行隐式拒绝。因错误或被交换的 `ek` 得到有效 32 字节替代秘密、最终没有任何 `rid` 命中时，只有在完整扫描结束后才返回 `NotForMe`；不得把单个 `rid` 不匹配当作提前退出条件。
+10. 若攻击者可控的低阶 `epk` 或任一 1088 字节 `ek` 触发密码 provider 的 X25519/ML-KEM 操作失败，Receiver 必须锁存 candidate crypto failure，使用不会产生有效命中的 dummy candidate 继续完成可安全执行的固定扫描和常量时间比较，并最终将消息作为 `InvalidMessage` 拒绝。即使其它组合随后产生有效 `rid` 命中，也必须在任何 CEK unwrap 前失败；不得忽略已锁存的失败或提前返回。内部实现可统一使用 `KEY_UNWRAP_FAILED`、固定的泛化 message 且不附带可区分 cause。选中 entry 的 A256KW 完整性失败使用相同公开外观。
+11. null、closed、foreign handle，错误本地公钥长度，以及 provider 返回 null/错误长度、HKDF 违约等本地配置或 provider contract failure 属于内部错误，不得伪装为 `NotForMe`。
+12. Receiver 必须在成功和失败路径清除 `SS_ECC`、`SS_PQ`、`Z`、候选 `rid`、候选/选中 KEK、CEK、inner 和 GCM AAD 等 owned 临时材料。长期 X25519/ML-KEM private-key handles 由调用方借用，protocol flow 不得关闭；Sender 的每消息临时 X25519 private-key handle 必须关闭。
+
+本修订不改变 Obfuscation Hybrid 的 wire 字段、长度或算法白名单。对外投递语义仍只有 `NotForMe` 与 `InvalidMessage`；protocol 内部细分错误码不得成为区分 ML-KEM 解封装、A256KW unwrap 或其它认证失败的远程 oracle。
+
+### 2026-07-23：冻结 Armor 公共帧、文本封装与版本引导
+
+开发桌面端传输格式前确认：原开发阶段使用的无头尾 Base64URL 和“按字符集猜测格式”不适合作为最终 v1 Armor；同时，单字节版本号会限制后续字表与封装版本演进。Wind Letter v1.0 对 Armor 作如下修订：
+
+1. Binary 与两种文本 Armor 共享逻辑帧 `WLA | canonical unsigned LEB128(version) | uint32 length | outer JSON UTF-8 | CRC-32`。版本号必须为正整数并使用最短 unsigned LEB128；v1 仍编码为 `01`，因此 v1 binary 向量保持不变。
+2. 标准文本格式使用 RFC 4648 带 `=` padding 的 Base64，正文每行64个 ASCII 字符，外层固定为 `-----BEGIN WIND LETTER-----` 与 `-----END WIND LETTER-----`。
+3. 風笺文本固定使用 `-----風笺 起-----` 与 `-----風笺 凪-----`。正文先写永久冻结的 `WLA` 引导、无前导零的64进制版本号和终止符 `凪`，再按该版本选择 WindBase 正文字表。v1 完整引导为 `渢𩗍𩘥𬱶𬱶凪`。
+4. 文本自动路由只允许精确识别上述两个起始行，不再按 ASCII/非 ASCII 或字表成员关系猜测；显式格式不得回退到另一解码器。未知、非规范版本和错误头部必须在访问收件人私钥前拒绝。
+5. 生成器使用 LF，解析器兼容 LF 与 CRLF；所有 風笺符号计数、换行、截断均按 Unicode 码点执行，不进行 Unicode normalization。
+6. 本修订只改变外部 Armor/transport 表示。outer/inner JSON 字段、AAD、kid、签名等协议内部原有 Base64URL 规则保持不变。
+
+完整字符表、哈希与文本格式以 [`WindLetter Armor规则.md`](./WindLetter%20Armor规则.md) 为准；若旧开发计划中的 Armor 描述与本修订冲突，以本修订和该规则文档为准。

@@ -34,23 +34,24 @@ public record DecryptRequest(
         boolean hasWireJson = !ModelChecks.isBlank(wireJson);
         boolean hasTextArmor = !ModelChecks.isBlank(armor);
         boolean hasBinaryArmor = armorBytes != null && armorBytes.length > 0;
-
-        // Ensure the caller provides at least one input representation.
-        if (!hasWireJson && !hasTextArmor && !hasBinaryArmor) {
-            throw new IllegalArgumentException("wireJson, armor or armorBytes must be provided");
-        }
-        if (hasTextArmor && hasBinaryArmor) {
-            throw new IllegalArgumentException("armor and armorBytes must not be provided together");
-        }
         if (armorBytes != null && armorBytes.length == 0) {
             throw new IllegalArgumentException("armorBytes must not be empty");
+        }
+
+        int representationCount = (hasWireJson ? 1 : 0)
+            + (hasTextArmor ? 1 : 0)
+            + (hasBinaryArmor ? 1 : 0);
+        if (representationCount != 1) {
+            throw new IllegalArgumentException(
+                "exactly one of wireJson, armor or armorBytes must be provided"
+            );
         }
 
         if (armorFormat == null) {
             if (hasBinaryArmor) {
                 armorFormat = ArmorFormat.BINARY;
             } else if (hasTextArmor) {
-                // When text armor is provided without format, let downstream parser auto-detect the concrete armor format.
+                // The receiver strictly auto-detects the concrete text format.
                 armorFormat = null;
             } else {
                 armorFormat = ArmorFormat.NONE;
@@ -58,18 +59,24 @@ public record DecryptRequest(
         } else {
             switch (armorFormat) {
                 case NONE -> {
-                    if (hasTextArmor || hasBinaryArmor) {
-                        throw new IllegalArgumentException("armor data must be absent when armorFormat is NONE");
+                    if (!hasWireJson) {
+                        throw new IllegalArgumentException(
+                            "wireJson is required when armorFormat is NONE"
+                        );
                     }
                 }
                 case BINARY -> {
-                    if (!hasBinaryArmor || hasTextArmor) {
-                        throw new IllegalArgumentException("armorBytes is required and armor must be blank when armorFormat is BINARY");
+                    if (!hasBinaryArmor) {
+                        throw new IllegalArgumentException(
+                            "armorBytes is required when armorFormat is BINARY"
+                        );
                     }
                 }
-                case BASE64URL, WIND_BASE_1024F_V1 -> {
-                    if (!hasTextArmor || hasBinaryArmor) {
-                        throw new IllegalArgumentException("text armor is required and armorBytes must be absent for text-based armorFormat");
+                case BASE64_PEM, WIND_BASE_1024F_V1 -> {
+                    if (!hasTextArmor) {
+                        throw new IllegalArgumentException(
+                            "text armor is required for a text-based armorFormat"
+                        );
                     }
                 }
             }

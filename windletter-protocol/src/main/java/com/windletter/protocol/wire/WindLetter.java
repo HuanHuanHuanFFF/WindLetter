@@ -20,7 +20,7 @@ public record WindLetter(
         protectedHeader = WireChecks.requireNonNull(protectedHeader, "protectedHeader");
         protectedValue = WireChecks.requireNonBlank(protectedValue, "protectedValue");
         aad = WireChecks.requireNonBlank(aad, "aad");
-        recipients = WireChecks.copyList(recipients, "recipients");
+        recipients = WireChecks.copyNonEmptyList(recipients, "recipients");
         iv = WireChecks.copyBytes(iv, "iv");
         ciphertext = WireChecks.copyBytes(ciphertext, "ciphertext");
         tag = WireChecks.copyBytes(tag, "tag");

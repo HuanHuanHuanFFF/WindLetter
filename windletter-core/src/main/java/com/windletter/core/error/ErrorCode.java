@@ -27,5 +27,7 @@ public enum ErrorCode {
     /** Field is missing, conflicting, or has an invalid value. */
     INVALID_FIELD,
     /** Other uncategorized internal errors. */
-    INTERNAL_ERROR
+    INTERNAL_ERROR,
+    /** Generic public result for any invalid or unauthenticated message. */
+    INVALID_MESSAGE
 }

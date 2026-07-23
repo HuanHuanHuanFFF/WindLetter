@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.windletter.core.error.ErrorCode;
 import com.windletter.protocol.ProtocolException;
+import com.windletter.protocol.codec.Base64Url;
 
-import java.util.Base64;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -163,22 +163,18 @@ final class ParserSupport {
     }
 
     static byte[] decodeBase64UrlStrict(String value, String fieldPath) {
-        if (value == null || value.isBlank()) {
-            throw invalidField(fieldPath + " must be non-blank");
-        }
-        if (value.indexOf('=') >= 0) {
-            throw malformed(fieldPath + " must be Base64URL without padding");
-        }
-        try {
-            return Base64.getUrlDecoder().decode(value);
-        } catch (IllegalArgumentException e) {
-            throw malformed(fieldPath + " is not valid Base64URL", e);
-        }
+        return Base64Url.decodeCanonical(value, fieldPath);
     }
 
     static void requireLength(byte[] value, int expectedLength, String fieldPath) {
         if (value.length != expectedLength) {
             throw invalidField(fieldPath + " must decode to " + expectedLength + " bytes");
+        }
+    }
+
+    static void requireMaxLength(byte[] value, int maxLength, String fieldPath) {
+        if (value.length > maxLength) {
+            throw invalidField(fieldPath + " must not exceed " + maxLength + " bytes");
         }
     }
 

@@ -44,7 +44,7 @@ public record EncryptedMessage(String wireJson, String armor, byte[] armorBytes,
                     throw new IllegalArgumentException("armorBytes is required and armor must be blank when armorFormat is BINARY");
                 }
             }
-            case BASE64URL, WIND_BASE_1024F_V1 -> {
+            case BASE64_PEM, WIND_BASE_1024F_V1 -> {
                 if (!hasTextArmor || hasBinaryArmor) {
                     throw new IllegalArgumentException("text armor is required and armorBytes must be absent for text-based armorFormat");
                 }

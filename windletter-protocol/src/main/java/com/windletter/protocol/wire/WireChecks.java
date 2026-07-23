@@ -38,4 +38,12 @@ final class WireChecks {
         requireNonNull(value, fieldName);
         return List.copyOf(value);
     }
+
+    static <T> List<T> copyNonEmptyList(List<T> value, String fieldName) {
+        List<T> copy = copyList(value, fieldName);
+        if (copy.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be empty");
+        }
+        return copy;
+    }
 }

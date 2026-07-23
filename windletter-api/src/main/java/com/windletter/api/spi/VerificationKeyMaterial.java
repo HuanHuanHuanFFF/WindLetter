@@ -18,8 +18,8 @@ public record VerificationKeyMaterial(
 
     public VerificationKeyMaterial {
         signingKid = SpiChecks.requireNonBlank(signingKid, "signingKid");
-        if (ed25519PublicKey == null || ed25519PublicKey.length == 0) {
-            throw new IllegalArgumentException("ed25519PublicKey must not be empty");
+        if (ed25519PublicKey == null || ed25519PublicKey.length != 32) {
+            throw new IllegalArgumentException("ed25519PublicKey must be exactly 32 bytes");
         }
         ed25519PublicKey = Arrays.copyOf(ed25519PublicKey, ed25519PublicKey.length);
         metadata = SpiChecks.copyMap(metadata);

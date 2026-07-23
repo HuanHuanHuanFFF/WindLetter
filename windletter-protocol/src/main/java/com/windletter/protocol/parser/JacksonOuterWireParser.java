@@ -2,6 +2,8 @@ package com.windletter.protocol.parser;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.windletter.protocol.ProtocolLimits;
+import com.windletter.protocol.codec.StrictJson;
 import com.windletter.protocol.wire.ProtectedHeader;
 import com.windletter.protocol.wire.WindLetter;
 
@@ -25,7 +27,7 @@ public final class JacksonOuterWireParser implements OuterWireParser {
     private final ObfuscationOuterBranchParser obfuscationBranchParser;
 
     public JacksonOuterWireParser() {
-        this(new ObjectMapper(), new PublicOuterBranchParser(), new ObfuscationOuterBranchParser());
+        this(StrictJson.newMapper(), new PublicOuterBranchParser(), new ObfuscationOuterBranchParser());
     }
 
     JacksonOuterWireParser(
@@ -40,7 +42,11 @@ public final class JacksonOuterWireParser implements OuterWireParser {
 
     @Override
     public WindLetter parse(String wireJson) {
-        if (wireJson == null || wireJson.isBlank()) {
+        if (wireJson == null) {
+            throw ParserSupport.malformed("wireJson must be valid JSON");
+        }
+        validateWireUtf8(wireJson);
+        if (wireJson.isBlank()) {
             throw ParserSupport.malformed("wireJson must be valid JSON");
         }
 
@@ -73,6 +79,11 @@ public final class JacksonOuterWireParser implements OuterWireParser {
                 ParserSupport.requireText(outerNode, "ciphertext", "outer"),
                 "outer.ciphertext"
         );
+        ParserSupport.requireMaxLength(
+                ciphertext,
+                ProtocolLimits.MAX_CIPHERTEXT_BYTES,
+                "outer.ciphertext"
+        );
         byte[] tag = ParserSupport.decodeBase64UrlStrict(
                 ParserSupport.requireText(outerNode, "tag", "outer"),
                 "outer.tag"
@@ -80,9 +91,6 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         ParserSupport.requireLength(tag, ParserSupport.LEN_GCM_TAG, "outer.tag");
 
         JsonNode recipientsNode = ParserSupport.requireArrayField(outerNode, "recipients", "outer");
-        if (recipientsNode.isEmpty()) {
-            throw ParserSupport.invalidField("outer.recipients must not be empty");
-        }
 
         String typ = ParserSupport.requireText(protectedNode, "typ", "outer.protected");
         String cty = ParserSupport.requireText(protectedNode, "cty", "outer.protected");
@@ -92,10 +100,39 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         String keyAlg = ParserSupport.requireText(protectedNode, "key_alg", "outer.protected");
 
         validateCoreWhitelist(typ, cty, windMode);
+        validateRecipientCount(windMode, recipientsNode.size());
 
         BranchParseResult branchResult = parseBranch(windMode, keyAlg, protectedNode, recipientsNode);
         ProtectedHeader protectedHeader = new ProtectedHeader(typ, cty, ver, windMode, enc, keyAlg, branchResult.senderInfo());
         return new WindLetter(protectedHeader, protectedValue, aad, branchResult.recipients(), iv, ciphertext, tag);
+    }
+
+    private static void validateWireUtf8(String wireJson) {
+        int utf8Length = 0;
+        for (int i = 0; i < wireJson.length(); i++) {
+            char current = wireJson.charAt(i);
+            int encodedLength;
+            if (current <= 0x7f) {
+                encodedLength = 1;
+            } else if (current <= 0x7ff) {
+                encodedLength = 2;
+            } else if (Character.isHighSurrogate(current)) {
+                if (i + 1 >= wireJson.length() || !Character.isLowSurrogate(wireJson.charAt(i + 1))) {
+                    throw ParserSupport.malformed("wireJson contains an unpaired UTF-16 high surrogate");
+                }
+                i++;
+                encodedLength = 4;
+            } else if (Character.isLowSurrogate(current)) {
+                throw ParserSupport.malformed("wireJson contains an unpaired UTF-16 low surrogate");
+            } else {
+                encodedLength = 3;
+            }
+
+            if (utf8Length > ProtocolLimits.MAX_WIRE_UTF8_BYTES - encodedLength) {
+                throw ParserSupport.malformed("wireJson UTF-8 encoding exceeds the maximum size");
+            }
+            utf8Length += encodedLength;
+        }
     }
 
     private BranchParseResult parseBranch(String windMode, String keyAlg, JsonNode protectedNode, JsonNode recipientsNode) {
@@ -157,6 +194,18 @@ public final class JacksonOuterWireParser implements OuterWireParser {
         }
         if (!ParserSupport.MODE_PUBLIC.equals(windMode) && !ParserSupport.MODE_OBFUSCATION.equals(windMode)) {
             throw ParserSupport.invalidField("outer.protected.wind_mode must be public or obfuscation");
+        }
+    }
+
+    private static void validateRecipientCount(String windMode, int count) {
+        if (ParserSupport.MODE_PUBLIC.equals(windMode)) {
+            if (count < 1 || count > ProtocolLimits.MAX_RECIPIENTS) {
+                throw ParserSupport.invalidField("outer.recipients must contain 1..32 entries in public mode");
+            }
+            return;
+        }
+        if (count != 8 && count != 16 && count != 32) {
+            throw ParserSupport.invalidField("outer.recipients must contain 8, 16, or 32 entries in obfuscation mode");
         }
     }
 
