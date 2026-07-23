@@ -6,8 +6,11 @@ import com.windletter.crypto.api.MLKem768PrivateKeyHandle;
 import com.windletter.crypto.api.X25519PrivateKeyHandle;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -97,6 +100,29 @@ class BouncyCastlePrivateKeyExportTest {
     }
 
     @Test
+    void shouldPreserveKnownX25519AndMlKem768PrivateEncodings() throws IOException {
+        byte[] x25519PrivateKey = hex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
+        Properties vector = loadProperties("vectors/cctv/mlkem768-strcmp-vector1.properties");
+        byte[] mlKemPrivateKey = hex(vector.getProperty("dk"));
+        byte[] exportedX25519 = null;
+        byte[] exportedMlKem = null;
+
+        try (X25519PrivateKeyHandle importedX25519 = x25519.importPrivateKey(x25519PrivateKey);
+             MLKem768PrivateKeyHandle importedMlKem = mlKem768.importPrivateKey(mlKemPrivateKey)) {
+            exportedX25519 = x25519.exportPrivateKey(importedX25519);
+            exportedMlKem = mlKem768.exportPrivateKey(importedMlKem);
+
+            assertArrayEquals(x25519PrivateKey, exportedX25519);
+            assertArrayEquals(mlKemPrivateKey, exportedMlKem);
+        } finally {
+            clear(x25519PrivateKey);
+            clear(mlKemPrivateKey);
+            clear(exportedX25519);
+            clear(exportedMlKem);
+        }
+    }
+
+    @Test
     void shouldRejectNullForeignAndClosedHandles() {
         assertThrows(IllegalArgumentException.class, () -> x25519.exportPrivateKey(null));
         assertThrows(IllegalArgumentException.class, () -> mlKem768.exportPrivateKey(null));
@@ -147,6 +173,19 @@ class BouncyCastlePrivateKeyExportTest {
         assertThrows(IllegalStateException.class, () -> x25519.exportPrivateKey(closedX25519));
         assertThrows(IllegalStateException.class, () -> mlKem768.exportPrivateKey(closedMlKem));
         assertThrows(IllegalStateException.class, () -> ed25519.exportPrivateKey(closedEd25519));
+    }
+
+    private static Properties loadProperties(String resourcePath) throws IOException {
+        Properties properties = new Properties();
+        try (InputStream in = BouncyCastlePrivateKeyExportTest.class
+                .getClassLoader()
+                .getResourceAsStream(resourcePath)) {
+            if (in == null) {
+                throw new IOException("missing test resource: " + resourcePath);
+            }
+            properties.load(in);
+        }
+        return properties;
     }
 
     private static byte[] hex(String value) {
